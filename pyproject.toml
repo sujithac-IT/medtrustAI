@@ -1,0 +1,14 @@
+[project]
+name = "medtrustai"
+version = "2.0.0"
+description = "MedTrust AI - Clinical Telehealth & AI Case Sheet Platform"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "httpx",
+]
+
+[tool.vercel]
+entrypoint = "backend.app.main:app"
