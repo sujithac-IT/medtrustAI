@@ -53,6 +53,12 @@ app.include_router(casesheets.router)
 app.include_router(journals.router)
 
 
+@app.get("/spaces/{space_id:path}/transcripts")
+def get_spaces_transcripts_direct(space_id: str):
+    """Direct Google Meet REST API endpoint: GET spaces/{space}/transcripts"""
+    return consultations.get_google_meet_transcripts_endpoint(space_id)
+
+
 # --- Real-Time WebSocket Connection Manager for Consultations ---
 class ConsultationConnectionManager:
     def __init__(self):

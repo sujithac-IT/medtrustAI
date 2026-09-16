@@ -129,6 +129,24 @@ def test_case_sheet_approval_lock_api():
     cs = resp.json()
     cs_id = cs["id"]
 
+    # Ensure the case sheet is in approved_locked state
+    if cs.get("status") != "approved_locked":
+        approve_resp = client.post(f"/api/casesheets/{cs_id}/approve", json={
+            "doctor_id": "doc-1",
+            "doctor_name": "Dr. Rajesh Sharma, MD",
+            "doctor_registration": "TNMC-84920",
+            "doctor_specialization": "Internal Medicine & Cardiology",
+            "electronic_signature": "SIGN-VERIFIED-DR-RAJESH-SHARMA",
+            "verification_notes": "Clinical findings cross-verified against live transcription.",
+            "checklist": {
+                "symptoms_verified": True,
+                "medications_checked": True,
+                "red_flags_evaluated": True,
+                "treatment_approved": True
+            }
+        })
+        assert approve_resp.status_code == 200
+
     # Attempting to edit an approved_locked record must return 403 Forbidden
     edit_resp = client.put(f"/api/casesheets/{cs_id}", json={
         "sections": cs["sections"]
@@ -143,3 +161,69 @@ def test_print_html_endpoint():
     assert "text/html" in resp.headers["content-type"]
     assert "Apollo - MedTrust University Teaching Hospital" in resp.text
     assert "Clinical Case Sheet" in resp.text
+
+
+def test_google_meet_transcripts_rest_api():
+    # Test direct REST API endpoint: GET spaces/{space}/transcripts
+    resp = client.get("/spaces/mt-cardio-9842/transcripts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "entries" in data
+    assert len(data["entries"]) > 0
+    assert any("Sneha" in e["participant"] for e in data["entries"])
+    assert any("Sundaram" in e["participant"] for e in data["entries"])
+
+
+def test_firebase_auth_and_session():
+    # Test session endpoint
+    sess_resp = client.get("/api/auth/session")
+    assert sess_resp.status_code == 200
+    assert sess_resp.json()["authenticated"] is True
+
+    # Test Firebase login with demo fallback
+    fb_resp = client.post("/api/auth/firebase-login", json={
+        "id_token": "demo-token-12345",
+        "role": "doctor"
+    })
+    assert fb_resp.status_code == 200
+    fb_data = fb_resp.json()
+    assert fb_data["status"] == "authenticated"
+    assert fb_data["user"]["role"] == "doctor"
+    assert fb_data["user"]["permissions"]["can_sign_case_sheets"] is True
+
+
+def test_multi_role_switching_and_permissions():
+    # Switch to Medical Student
+    stu_resp = client.post("/api/auth/switch-role/stu-1")
+    assert stu_resp.status_code == 200
+    stu_data = stu_resp.json()
+    assert stu_data["user"]["role"] == "student"
+    assert stu_data["user"]["permissions"]["is_student"] is True
+    assert stu_data["user"]["permissions"]["can_sign_case_sheets"] is False
+
+    # Switch to Patient
+    pat_resp = client.post("/api/auth/switch-role/pat-1")
+    assert pat_resp.status_code == 200
+    pat_data = pat_resp.json()
+    assert pat_data["user"]["role"] == "patient"
+    assert pat_data["user"]["permissions"]["can_sign_case_sheets"] is False
+
+    # Switch back to Doctor
+    doc_resp = client.post("/api/auth/switch-role/doc-1")
+    assert doc_resp.status_code == 200
+    assert doc_resp.json()["user"]["role"] == "doctor"
+    assert doc_resp.json()["user"]["permissions"]["can_sign_case_sheets"] is True
+
+
+def test_create_consultation_google_meet_space():
+    resp = client.post("/api/consultations/", json={
+        "patient_id": "pat-1",
+        "doctor_id": "doc-1",
+        "student_id": "stu-1"
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["google_meet"]["space_name"].startswith("spaces/mt-")
+    assert "meet.google.com" in data["google_meet"]["meeting_uri"]
+    assert data["status"] in ["scheduled", "in_progress"]
+

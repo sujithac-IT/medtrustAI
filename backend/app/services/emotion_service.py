@@ -5,21 +5,22 @@ the FastAPI layer doesn't need to know about the ai/ package's internals.
 import logging
 from typing import Any, Dict
 
-from ai.inference.emotion_predict import EmotionAnalyzer
-from ai.inference.qwen_reasoning import QwenReasoning
+try:
+    from ai.inference.emotion_predict import EmotionAnalyzer
+    from ai.inference.qwen_reasoning import QwenReasoning
+except ImportError:
+    EmotionAnalyzer = None
+    QwenReasoning = None
 
 logger = logging.getLogger(__name__)
 
-# Module-level lazy singleton: EmotionAnalyzer itself defers real model
-# loading to first use (via ai.model_registry), so constructing it here is
-# cheap — the first /journals/analyze request pays the real model-load cost,
-# every request after that reuses the already-loaded models.
-_analyzer: EmotionAnalyzer = None
+# Module-level lazy singleton
+_analyzer = None
 
 
-def _get_analyzer() -> EmotionAnalyzer:
+def _get_analyzer():
     global _analyzer
-    if _analyzer is None:
+    if _analyzer is None and EmotionAnalyzer is not None:
         _analyzer = EmotionAnalyzer()
     return _analyzer
 

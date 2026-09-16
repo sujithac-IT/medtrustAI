@@ -105,6 +105,9 @@ function updateUserUI() {
   const nameEl = document.getElementById("user-display-name");
   const roleEl = document.getElementById("user-display-role");
   const badgeEl = document.getElementById("user-role-badge");
+  const firebaseBadge = document.getElementById("firebase-auth-badge-label");
+  const signBtn = document.getElementById("btn-doctor-sign");
+  const btnEdit = document.getElementById("btn-mode-edit");
 
   if (nameEl) nameEl.textContent = state.currentUser.name;
   if (roleEl) roleEl.textContent = `${state.currentUser.role.toUpperCase()} (${state.currentUser.designation || 'Specialist'})`;
@@ -113,6 +116,23 @@ function updateUserUI() {
     badgeEl.className = "w-2.5 h-2.5 rounded-full " + 
       (state.currentUser.role === "doctor" ? "bg-teal-500" :
        state.currentUser.role === "student" ? "bg-purple-500" : "bg-emerald-500");
+  }
+
+  if (firebaseBadge) {
+    firebaseBadge.textContent = `Firebase: ${state.currentUser.role.toUpperCase()}`;
+  }
+
+  // Role-based UI visibility
+  if (signBtn) {
+    if (state.currentUser.role === "doctor") {
+      signBtn.title = "Review and digitally sign this case sheet";
+      signBtn.classList.remove("opacity-50");
+    } else if (state.currentUser.role === "student") {
+      signBtn.title = "Requires Attending Doctor Sign-Off";
+      signBtn.classList.remove("opacity-50");
+    } else {
+      signBtn.title = "Sign-off reserved for certified medical doctors";
+    }
   }
 
   // Update modal doctor info
@@ -137,10 +157,90 @@ async function selectUser(userId) {
       state.currentUser = data.user;
       updateUserUI();
       toggleRoleDropdown();
-      showToast(`Perspective switched to ${data.user.name}`, "success");
+      showToast(`Perspective switched to ${data.user.name} (${data.user.role.toUpperCase()})`, "success");
+      
+      // Auto re-render active case sheet to reflect role permissions
+      if (state.activeCaseSheet) {
+        renderCaseSheet(state.activeCaseSheet);
+      }
     }
   } catch (err) {
     console.error("Failed to switch user role:", err);
+  }
+}
+
+// --- Firebase Authentication Modal Helpers ---
+function openFirebaseAuthModal() {
+  const modal = document.getElementById("modal-firebase-auth");
+  modal?.classList.remove("hidden");
+}
+
+function closeFirebaseAuthModal() {
+  const modal = document.getElementById("modal-firebase-auth");
+  modal?.classList.add("hidden");
+}
+
+async function selectUserAndCloseAuth(userId) {
+  await selectUser(userId);
+  closeFirebaseAuthModal();
+}
+
+async function submitFirebaseTokenLogin() {
+  const tokenInput = document.getElementById("firebase-token-input");
+  const tokenVal = tokenInput ? tokenInput.value.trim() : "";
+  if (!tokenVal) {
+    showToast("Please enter an email or Firebase ID token", "warning");
+    return;
+  }
+  try {
+    const res = await fetch("/api/auth/firebase-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: tokenVal, email: tokenVal.includes("@") ? tokenVal : "" })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      state.currentUser = data.user;
+      updateUserUI();
+      closeFirebaseAuthModal();
+      showToast(`Firebase Authenticated: ${data.user.name} (${data.user.role})`, "success");
+    } else {
+      showToast("Firebase verification failed", "danger");
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Firebase verification error", "danger");
+  }
+}
+
+// --- Dynamic Google Meet Spaces API Creator ---
+async function createNewMeetSpace() {
+  showToast("Creating new Google Meet Space via Meet Spaces API...", "info");
+  try {
+    const patientId = state.activeConsultation?.patient_id || "pat-1";
+    const doctorId = state.currentUser?.role === "doctor" ? state.currentUser.id : "doc-1";
+    const studentId = state.currentUser?.role === "student" ? state.currentUser.id : "stu-1";
+
+    const res = await fetch("/api/consultations/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patient_id: patientId,
+        doctor_id: doctorId,
+        student_id: studentId
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      state.activeConsultationId = data.id;
+      state.callTimerSeconds = 0;
+      await loadConsultation(data.id);
+      showToast(`New Space Created: ${data.google_meet?.space_name} (${data.google_meet?.meeting_code})`, "success");
+    }
+  } catch (err) {
+    console.error("Error creating Google Meet space:", err);
+    showToast("Failed to create Meet Space", "danger");
   }
 }
 
@@ -776,6 +876,10 @@ function removeMedicationRow(medId) {
 }
 
 function toggleEditMode(enable) {
+  if (state.currentUser?.role === "patient") {
+    showToast("Patient view is read-only for clinical safety. You can listen to your regional audio summary below.", "warning");
+    return;
+  }
   if (state.activeCaseSheet?.status === "approved_locked") {
     showToast("Approved records are locked and cannot be edited.", "warning");
     return;
@@ -946,7 +1050,11 @@ function stopSummaryTTS() {
 // --- Doctor Approval & Electronic Sign-Off Workflow ---
 function openDoctorApprovalModal() {
   if (state.currentUser?.role !== "doctor") {
-    showToast("Access Denied: Only certified Medical Doctors can approve clinical case sheets.", "danger");
+    if (state.currentUser?.role === "student") {
+      showToast("Medical Student perspective: Attending doctor verification required. Switch perspective to Dr. Rajesh Sharma to digitally sign and lock.", "warning");
+    } else {
+      showToast("Access Denied: Only certified Medical Doctors can approve clinical case sheets.", "danger");
+    }
     return;
   }
   if (!state.activeCaseSheet) {

@@ -270,27 +270,29 @@ def load_scenario_into_consultation(consultation_id: str, scenario_key: str):
     }
 
 
-@router.get("/google-meet/transcripts/{space_id}")
+@router.get("/google-meet/transcripts/{space_id:path}")
+@router.get("/spaces/{space_id:path}/transcripts")
 def get_google_meet_transcripts_endpoint(space_id: str):
     """
-    Simulates retrieval via Google Meet REST API endpoint:
+    Retrieval via Google Meet REST API endpoint:
     GET spaces/{space}/transcripts
     https://developers.google.com/meet/api/reference/rest/v2/spaces.transcripts
     """
+    clean_space = space_id.replace("spaces/", "").strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
     SELECT c.id, c.google_meet_json
     FROM consultations c
     WHERE c.google_meet_json LIKE ?
-    """, (f"%{space_id}%",))
+    """, (f"%{clean_space}%",))
     row = cursor.fetchone()
 
     if not row:
         conn.close()
         return {
-            "name": f"spaces/{space_id}/transcripts",
-            "transcripts": [],
+            "name": f"spaces/{clean_space}/transcripts",
+            "entries": [],
             "state": "ACTIVE"
         }
 
@@ -301,7 +303,7 @@ def get_google_meet_transcripts_endpoint(space_id: str):
 
     formatted_entries = [
         {
-            "name": f"spaces/{space_id}/transcripts/{t['id']}",
+            "name": f"spaces/{clean_space}/transcripts/{t['id']}",
             "participant": t["speaker_name"],
             "role": t["speaker"],
             "text": t["text"],
@@ -311,7 +313,7 @@ def get_google_meet_transcripts_endpoint(space_id: str):
     ]
 
     return {
-        "name": f"spaces/{space_id}/transcripts",
+        "name": f"spaces/{clean_space}/transcripts",
         "entries": formatted_entries,
         "state": "ENDED" if len(turns) > 5 else "ACTIVE"
     }
