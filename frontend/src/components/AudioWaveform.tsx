@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef } from 'react'
 
 interface AudioWaveformProps {
   isActive: boolean
@@ -11,25 +11,49 @@ export default function AudioWaveform({ isActive, color = '#00D4AA', barCount = 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number | undefined>(undefined)
   const barsRef = useRef<number[]>(Array(barCount).fill(0))
+  // Cache the canvas width so we don't read offsetWidth inside the rAF loop
+  // (reading offsetWidth inside rAF forces a layout recalculation every frame)
+  const canvasWidthRef = useRef<number>(0)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
 
-    const animate = () => {
-      canvas.width = canvas.offsetWidth
-      canvas.height = height
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    // --- One-time size sync + ResizeObserver so we only recalc on actual resize ---
+    const syncSize = () => {
+      const w = canvas.offsetWidth
+      if (w !== canvasWidthRef.current) {
+        canvasWidthRef.current = w
+        // Writing canvas.width flushes the raster buffer; do it only when truly needed
+        canvas.width = w
+        canvas.height = height
+      }
+    }
 
-      const barWidth = (canvas.width / barCount) * 0.6
-      const gap = canvas.width / barCount
+    syncSize()
+
+    const ro = new ResizeObserver(syncSize)
+    ro.observe(canvas)
+
+    // --- Animation loop: never reads offsetWidth, uses cached value ---
+    const animate = () => {
+      const w = canvasWidthRef.current
+      if (w === 0) {
+        animFrameRef.current = requestAnimationFrame(animate)
+        return
+      }
+
+      ctx.clearRect(0, 0, w, height)
+
+      const barWidth = (w / barCount) * 0.6
+      const gap = w / barCount
 
       barsRef.current = barsRef.current.map((prev, i) => {
         if (!isActive) {
-          return prev * 0.85 // decay
+          return prev * 0.85 // smooth decay to zero
         }
-        // Simulate audio levels
+        // Simulate realistic audio levels with a sinusoidal rhythm
         const target = Math.random() * 0.8 + 0.1 + Math.sin(Date.now() / 200 + i * 0.5) * 0.15
         return prev * 0.7 + target * 0.3
       })
@@ -44,17 +68,17 @@ export default function AudioWaveform({ isActive, color = '#00D4AA', barCount = 
           // Multi-color neon spectrum across the visualizer width
           const hueRatio = i / barCount
           if (hueRatio < 0.33) {
-            gradient.addColorStop(0, '#00E5FF') // Neon Cyan
+            gradient.addColorStop(0, '#00E5FF')  // Neon Cyan
             gradient.addColorStop(0.6, '#00D4AA') // Teal
-            gradient.addColorStop(1, '#059669') // Emerald
+            gradient.addColorStop(1, '#059669')   // Emerald
           } else if (hueRatio < 0.66) {
-            gradient.addColorStop(0, '#A855F7') // Bright Purple
+            gradient.addColorStop(0, '#A855F7')   // Bright Purple
             gradient.addColorStop(0.5, '#6366F1') // Indigo
-            gradient.addColorStop(1, '#3B82F6') // Blue
+            gradient.addColorStop(1, '#3B82F6')   // Blue
           } else {
-            gradient.addColorStop(0, '#EC4899') // Pink
+            gradient.addColorStop(0, '#EC4899')   // Pink
             gradient.addColorStop(0.5, '#8B5CF6') // Violet
-            gradient.addColorStop(1, '#00D4AA') // Cyan
+            gradient.addColorStop(1, '#00D4AA')   // Cyan
           }
         } else {
           gradient.addColorStop(0, '#334155')
@@ -71,7 +95,11 @@ export default function AudioWaveform({ isActive, color = '#00D4AA', barCount = 
     }
 
     animFrameRef.current = requestAnimationFrame(animate)
-    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current) }
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      ro.disconnect()
+    }
   }, [isActive, color, barCount, height])
 
   return (

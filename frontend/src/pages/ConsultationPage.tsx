@@ -6,6 +6,14 @@ import LiveTranscript from '../components/LiveTranscript'
 import { generateCaseSheet, DEMO_TRANSCRIPT } from '../services/gemini'
 import type { TranscriptEntry, CaseSheet, Patient } from '../types'
 
+// Mirrors a value in a ref so callbacks always see the latest value without needing it in dep arrays
+function useLatestRef<T>(value: T) {
+  const ref = useRef(value)
+  ref.current = value
+  return ref
+}
+
+
 const CURRENT_PATIENT: Patient = {
   id: 'p_sundaram',
   name: 'K. Sundaram',
@@ -37,6 +45,11 @@ export default function ConsultationPage() {
 
   const recognitionRef = useRef<any>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Refs that always hold the latest values so we can read them inside stable callbacks
+  const elapsedRef = useLatestRef(elapsedSeconds)
+  const isRecordingRef = useLatestRef(isRecording)
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
 
   // Live timer
   useEffect(() => {
@@ -48,10 +61,19 @@ export default function ConsultationPage() {
     }
   }, [])
 
-  // Web Speech API for real-time live mic speech recognition
+  // Real-time speech recognition.
+  // CRITICAL: elapsedSeconds and isRecording are intentionally NOT in the dep array.
+  // They are read from refs (elapsedRef / isRecordingRef) so this callback is stable
+  // and the SpeechRecognition object is created only once — not on every timer tick.
   const startSpeechRecognition = useCallback(() => {
     const SpeechRec = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
     if (!SpeechRec) return
+
+    // Stop any existing instance before creating a new one
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch {}
+      recognitionRef.current = null
+    }
 
     try {
       const rec = new SpeechRec()
@@ -73,7 +95,8 @@ export default function ConsultationPage() {
                 id: `t_${Date.now()}_${Math.random()}`,
                 speaker: speakerToggle ? 'doctor' : 'patient',
                 text,
-                timestamp: elapsedSeconds * 1000,
+                // Use ref — current elapsed time without adding to callback deps
+                timestamp: elapsedRef.current * 1000,
               }
               setTranscript(prev => [...prev, entry])
               setInterimText('')
@@ -85,27 +108,54 @@ export default function ConsultationPage() {
         setInterimText(interim)
       }
 
-      rec.onerror = () => {}
+      rec.onerror = (e: any) => {
+        // 'no-speech' fires when the mic is just quiet — not a real error
+        if (e.error === 'no-speech') return
+        console.warn('SpeechRecognition error:', e.error)
+      }
+
+      // Debounce restart: 300ms gap prevents InvalidStateError from calling
+      // rec.start() before the browser has finished tearing down the prior session
       rec.onend = () => {
-        if (isRecording && recognitionRef.current) {
-          try { rec.start() } catch { /* ignore */ }
-        }
+        if (restartTimerRef.current) clearTimeout(restartTimerRef.current)
+        restartTimerRef.current = setTimeout(() => {
+          if (isRecordingRef.current && recognitionRef.current === rec) {
+            try { rec.start() } catch { /* browser denied restart — stop cleanly */ }
+          }
+        }, 300)
       }
 
       recognitionRef.current = rec
       rec.start()
-    } catch {
-      /* fallback */
+    } catch (err) {
+      console.warn('SpeechRecognition start failed:', err)
     }
-  }, [user?.role, isRecording, elapsedSeconds])
+  }, [user?.role]) // elapsedSeconds + isRecording read via refs — NOT listed as deps
 
-  const stopSpeechRecognition = () => {
+  const stopSpeechRecognition = useCallback(() => {
+    // Cancel any pending debounced restart first
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current)
+      restartTimerRef.current = null
+    }
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch {}
       recognitionRef.current = null
     }
     setInterimText('')
-  }
+  }, [])
+
+  // Full cleanup on page unmount — prevents audio/timer leaks
+  useEffect(() => {
+    return () => {
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current)
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop() } catch {}
+        recognitionRef.current = null
+      }
+    }
+  }, [])
+
 
   const toggleRecording = () => {
     if (isRecording) {

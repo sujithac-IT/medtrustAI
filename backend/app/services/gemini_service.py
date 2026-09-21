@@ -86,7 +86,7 @@ def extract_local_nlp(transcript: List[TranscriptEntry]) -> Dict[str, Any]:
     pulse = pulse_match.group(1) if pulse_match else "88"
 
     return {
-        "chiefComplaint": "Acute chest pain with associated breathlessness for 3 days" if "chest" in symptoms[0].lower() if symptoms else "Consultation for clinical evaluation",
+        "chiefComplaint": "Acute chest pain with associated breathlessness for 3 days" if (symptoms and "chest" in symptoms[0].lower()) else "Consultation for clinical evaluation",
         "hpi": "Patient presents with a 3-day history of sharp chest pain worsening on deep inspiration and exertion. Associated with left shoulder radiation, exertional dyspnea, and nocturnal diaphoresis.",
         "symptoms": symptoms or ["Chest pain", "Dyspnea"],
         "duration": "3 days",

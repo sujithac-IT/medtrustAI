@@ -34,6 +34,16 @@ export default function MeetRoom({
   const [showMeetIframe, setShowMeetIframe] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
 
+  // Stop all media tracks on unmount to release the camera/mic and prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
+      }
+    }
+  }, [])
+
   // Start patient webcam if user activates it
   const activateWebcam = () => {
     navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
