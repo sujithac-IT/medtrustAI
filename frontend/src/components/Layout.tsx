@@ -1,21 +1,25 @@
 import React, { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { SUPPORTED_LANGUAGES } from '../i18n/config'
 import i18n from '../i18n/config'
 
 const NAV_ITEMS = [
-  { to: '/dashboard',     icon: '⬡',  labelKey: 'nav_dashboard',    badge: 0 },
-  { to: '/consultation',  icon: '📹',  labelKey: 'nav_consultation', badge: 0 },
-  { to: '/patients',      icon: '👥',  labelKey: 'nav_patients',     badge: 0 },
-  { to: '/history',       icon: '📋',  labelKey: 'nav_history',      badge: 0 },
+  { to: '/dashboard',            icon: '⬡',  label: 'Dashboard',            section: 'main' },
+  { to: '/consultation',         icon: '📹',  label: 'Live Consultation',     section: 'main', highlight: true },
+  { to: '/patients',             icon: '👥',  label: 'Patients',              section: 'main' },
+  { to: '/case-sheets',          icon: '📋',  label: 'Case Sheets',           section: 'main' },
+  { to: '/history',              icon: '🕒',  label: 'Consultation History',  section: 'main' },
+  { to: '/multilingual-summary', icon: '🌐',  label: 'Multilingual Summary',  section: 'tools' },
+  { to: '/settings',             icon: '⚙️',  label: 'Settings',              section: 'tools' },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
 
@@ -26,6 +30,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const initials = user?.displayName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'
   const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === i18n.language) || SUPPORTED_LANGUAGES[0]
+
+  const mainItems = NAV_ITEMS.filter(n => n.section === 'main')
+  const toolItems = NAV_ITEMS.filter(n => n.section === 'tools')
+
+  const getPageTitle = () => {
+    const path = location.pathname
+    if (path.includes('/consultation')) return 'Live Consultation'
+    if (path.includes('/patients')) return 'Patient Management'
+    if (path.includes('/case-sheet')) return 'Clinical Case Sheet'
+    if (path.includes('/case-sheets')) return 'Case Sheets'
+    if (path.includes('/history')) return 'Consultation History'
+    if (path.includes('/multilingual-summary')) return 'Multilingual Summary'
+    if (path.includes('/settings')) return 'Settings'
+    return 'Dashboard'
+  }
 
   return (
     <div className="app-layout">
@@ -47,38 +66,54 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="sidebar-logo-icon">⚕️</div>
           <div className="sidebar-logo-text">
             <span className="sidebar-logo-name">MedTrust AI</span>
-            <span className="sidebar-logo-sub">Clinical Intelligence</span>
+            <span className="sidebar-logo-sub">AI-Powered Clinical Care</span>
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="sidebar-nav">
           <span className="sidebar-section-label">Main Menu</span>
-          {NAV_ITEMS.map(item => (
+          {mainItems.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+              style={item.highlight ? {
+                background: 'linear-gradient(135deg, rgba(0,212,170,0.15), rgba(56,189,248,0.1))',
+              } : {}}
+            >
+              <span style={{ fontSize: 17 }}>{item.icon}</span>
+              <span style={{ flex: 1 }}>{item.label}</span>
+            </NavLink>
+          ))}
+
+          <span className="sidebar-section-label" style={{ marginTop: 12 }}>Tools & Settings</span>
+
+          {toolItems.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               onClick={() => setSidebarOpen(false)}
             >
-              <span style={{ fontSize: 18 }}>{item.icon}</span>
-              <span>{t(item.labelKey)}</span>
-              {item.badge > 0 && <span className="nav-item-badge">{item.badge}</span>}
+              <span style={{ fontSize: 17 }}>{item.icon}</span>
+              <span>{item.label}</span>
             </NavLink>
           ))}
 
-          <span className="sidebar-section-label" style={{ marginTop: 8 }}>Account</span>
-
           {/* Language selector */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', marginTop: 4 }}>
             <button
               className="nav-item"
-              style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start' }}
+              style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start', border: 'none', cursor: 'pointer' }}
               onClick={() => setLangMenuOpen(!langMenuOpen)}
             >
-              <span style={{ fontSize: 18 }}>🌐</span>
+              <span style={{ fontSize: 17 }}>🌍</span>
               <span style={{ flex: 1 }}>Language</span>
-              <span style={{ fontSize: 12, color: 'var(--color-teal)' }}>{currentLang.flag} {currentLang.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--color-teal)', background: 'var(--color-teal-dim)', borderRadius: 4, padding: '2px 6px' }}>
+                {currentLang.flag} {currentLang.name}
+              </span>
             </button>
 
             {langMenuOpen && (
@@ -99,19 +134,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     key={lang.code}
                     onClick={() => { i18n.changeLanguage(lang.code); setLangMenuOpen(false) }}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      width: '100%',
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                       padding: '8px 12px',
                       background: i18n.language === lang.code ? 'var(--color-teal-dim)' : 'transparent',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
+                      border: 'none', borderRadius: 'var(--radius-sm)',
                       color: i18n.language === lang.code ? 'var(--color-teal)' : 'var(--color-text-secondary)',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      transition: 'all var(--transition-fast)',
+                      cursor: 'pointer', fontSize: 13, fontWeight: 500,
                     }}
                   >
                     <span>{lang.flag}</span>
@@ -124,21 +152,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <button
             className="nav-item"
-            style={{ width: '100%', color: 'var(--color-danger)', border: 'none', background: 'transparent', cursor: 'pointer' }}
+            style={{ width: '100%', color: 'var(--color-danger)', border: 'none', background: 'transparent', cursor: 'pointer', marginTop: 4 }}
             onClick={handleLogout}
           >
-            <span style={{ fontSize: 18 }}>🚪</span>
-            <span>{t('nav_logout')}</span>
+            <span style={{ fontSize: 17 }}>🚪</span>
+            <span>Logout</span>
           </button>
         </nav>
 
-        {/* User card */}
+        {/* User card at bottom */}
         <div className="sidebar-user">
           <div className="sidebar-user-card">
             <div className="sidebar-avatar">{initials}</div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-name">{user?.displayName}</div>
-              <div className="sidebar-user-role">{user?.role === 'doctor' ? `Dr. ${user?.specialization || 'Medical Doctor'}` : 'Patient'}</div>
+              <div className="sidebar-user-role">
+                {user?.role === 'doctor'
+                  ? `Senior Doctor • MD`
+                  : 'Patient'}
+              </div>
             </div>
           </div>
         </div>
@@ -156,27 +188,47 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             ☰
           </button>
-          <div>
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-              {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+
+          {/* Page title and date */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                {getPageTitle()}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
             </div>
           </div>
+
           <div className="topbar-actions">
+            {/* Google Meet status badge */}
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 12px',
-              background: 'var(--color-teal-dim)',
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '5px 12px',
+              background: 'rgba(34,197,94,0.1)',
               borderRadius: 'var(--radius-full)',
-              border: '1px solid rgba(0,212,170,0.2)',
+              border: '1px solid rgba(34,197,94,0.3)',
+              fontSize: 12,
             }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-teal)', display: 'inline-block' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-teal)' }}>
-                {user?.role === 'doctor' ? 'DOCTOR' : 'PATIENT'}
-              </span>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block', boxShadow: '0 0 6px var(--color-success)' }} />
+              <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>Google Meet • Connected</span>
             </div>
-            <div className="sidebar-avatar" style={{ width: 36, height: 36, fontSize: 13 }}>{initials}</div>
+
+            {/* Notifications */}
+            <button className="btn btn-ghost btn-icon" style={{ position: 'relative' }}>
+              <span style={{ fontSize: 18 }}>🔔</span>
+              <span style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: 'var(--color-danger)', border: '2px solid var(--color-bg-primary)' }} />
+            </button>
+
+            {/* User avatar + name */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>{user?.displayName}</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Senior Doctor • MD</div>
+              </div>
+              <div className="sidebar-avatar" style={{ width: 38, height: 38, fontSize: 14 }}>{initials}</div>
+            </div>
           </div>
         </header>
 

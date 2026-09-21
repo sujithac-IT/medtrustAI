@@ -3,19 +3,94 @@ import { useNavigate } from 'react-router-dom'
 import type { Patient } from '../types'
 
 const INITIAL_PATIENTS: Patient[] = [
-  { id: 'p1', name: 'Arjun Krishnamurthy', dob: '1985-06-15', age: 39, gender: 'male', phone: '+91 98765 43210', bloodGroup: 'B+', allergies: ['Penicillin'], conditions: ['Hypertension'], createdAt: '2024-01-10', updatedAt: '2024-09-20' },
-  { id: 'p2', name: 'Priya Sundaram', dob: '1992-03-22', age: 32, gender: 'female', phone: '+91 87654 32109', bloodGroup: 'O+', allergies: [], conditions: ['Type 2 Diabetes'], createdAt: '2024-02-15', updatedAt: '2024-09-18' },
-  { id: 'p3', name: 'Ravi Shankar', dob: '1970-11-08', age: 54, gender: 'male', phone: '+91 76543 21098', bloodGroup: 'A+', allergies: ['Sulfa'], conditions: ['COPD', 'Hypertension'], createdAt: '2024-03-01', updatedAt: '2024-09-15' },
-  { id: 'p4', name: 'Meena Devi', dob: '1998-07-30', age: 26, gender: 'female', phone: '+91 65432 10987', bloodGroup: 'AB-', allergies: [], conditions: [], createdAt: '2024-04-20', updatedAt: '2024-09-10' },
-  { id: 'p5', name: 'Suresh Babu', dob: '1960-12-05', age: 63, gender: 'male', phone: '+91 54321 09876', bloodGroup: 'O-', allergies: ['Aspirin', 'NSAIDs'], conditions: ['CAD', 'Hypertension', 'CKD Stage 2'], createdAt: '2024-05-10', updatedAt: '2024-09-12' },
+  {
+    id: 'p_102345',
+    name: 'K. Sundaram',
+    mrn: '102345',
+    dob: '1966-04-12',
+    age: 58,
+    gender: 'male',
+    phone: '+91 98765 43210',
+    bloodGroup: 'B+',
+    allergies: ['Penicillin', 'Dust'],
+    conditions: ['Hypertension', 'Type 2 Diabetes'],
+    lastVisit: '12 Apr 2025',
+    createdAt: '2024-01-10',
+    updatedAt: '2024-09-20',
+  },
+  {
+    id: 'p_102346',
+    name: 'Lakshmi Devi',
+    mrn: '102346',
+    dob: '1979-08-20',
+    age: 45,
+    gender: 'female',
+    phone: '+91 87654 32109',
+    bloodGroup: 'O+',
+    allergies: ['Sulfa'],
+    conditions: ['Hypothyroidism'],
+    lastVisit: '08 Apr 2025',
+    createdAt: '2024-02-15',
+    updatedAt: '2024-09-18',
+  },
+  {
+    id: 'p_102347',
+    name: 'R. Prakash',
+    mrn: '102347',
+    dob: '1992-11-05',
+    age: 32,
+    gender: 'male',
+    phone: '+91 51234 56789',
+    bloodGroup: 'A+',
+    allergies: [],
+    conditions: ['Migraine'],
+    lastVisit: '03 Apr 2025',
+    createdAt: '2024-03-01',
+    updatedAt: '2024-09-15',
+  },
+  {
+    id: 'p_102348',
+    name: 'A. Priya',
+    mrn: '102348',
+    dob: '2012-05-18',
+    age: 12,
+    gender: 'female',
+    phone: '+91 93456 78901',
+    bloodGroup: 'B-',
+    allergies: ['Peanuts'],
+    conditions: ['Pediatric Asthma'],
+    lastVisit: '28 Mar 2025',
+    createdAt: '2024-04-20',
+    updatedAt: '2024-09-10',
+  },
+  {
+    id: 'p_102349',
+    name: 'S. Kumar',
+    mrn: '102349',
+    dob: '1957-02-14',
+    age: 67,
+    gender: 'male',
+    phone: '+91 94567 89012',
+    bloodGroup: 'AB+',
+    allergies: ['Aspirin'],
+    conditions: ['CAD', 'Hypertension'],
+    lastVisit: '20 Mar 2025',
+    createdAt: '2024-05-10',
+    updatedAt: '2024-09-12',
+  },
 ]
 
 function calculateAge(dob: string) {
-  const diff = Date.now() - new Date(dob).getTime()
-  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
+  if (!dob) return 34
+  const birth = new Date(dob)
+  const now = new Date('2025-04-12') // relative reference date
+  let age = now.getFullYear() - birth.getFullYear()
+  const m = now.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
+    age--
+  }
+  return isNaN(age) || age <= 0 ? 34 : age
 }
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
 export default function PatientsPage() {
   const navigate = useNavigate()
@@ -24,289 +99,494 @@ export default function PatientsPage() {
     return saved ? JSON.parse(saved) : INITIAL_PATIENTS
   })
   const [search, setSearch] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
-  const [newPatient, setNewPatient] = useState({
-    name: '', dob: '', gender: 'male' as Patient['gender'],
-    phone: '', email: '', bloodGroup: 'O+', address: '',
-    allergies: '', conditions: '',
-  })
+  const [showAddForm, setShowAddForm] = useState(true)
 
-  const filtered = patients.filter(p =>
+  // Add Patient Form State matching Screen 3
+  const [newName, setNewName] = useState('R. Meenakshi')
+  const [newDob, setNewDob] = useState('1990-08-15')
+  const [newGender, setNewGender] = useState('Female')
+  const [newPhone, setNewPhone] = useState('+91 98765 43210')
+  const [newBloodGroup, setNewBloodGroup] = useState('O+')
+  const [allergiesList, setAllergiesList] = useState<string[]>(['Pollen', 'Dust'])
+  const [conditionsList, setConditionsList] = useState<string[]>(['Asthma', 'Anxiety'])
+
+  const [inputAllergy, setInputAllergy] = useState('')
+  const [showAllergyInput, setShowAllergyInput] = useState(false)
+  const [inputCondition, setInputCondition] = useState('')
+  const [showConditionInput, setShowConditionInput] = useState(false)
+
+  const computedAge = calculateAge(newDob)
+
+  const filteredPatients = patients.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.phone.includes(search) ||
-    p.conditions.some(c => c.toLowerCase().includes(search.toLowerCase()))
+    (p.mrn && p.mrn.includes(search)) ||
+    p.phone.includes(search)
   )
 
-  const savePatients = (list: Patient[]) => {
-    setPatients(list)
-    localStorage.setItem('medtrust_patients', JSON.stringify(list))
-  }
-
-  const addPatient = () => {
-    const age = newPatient.dob ? calculateAge(newPatient.dob) : 0
-    const patient: Patient = {
+  const handleSavePatient = () => {
+    if (!newName.trim()) return
+    const newPatient: Patient = {
       id: `p_${Date.now()}`,
-      name: newPatient.name,
-      dob: newPatient.dob,
-      age,
-      gender: newPatient.gender,
-      phone: newPatient.phone,
-      email: newPatient.email,
-      bloodGroup: newPatient.bloodGroup,
-      address: newPatient.address,
-      allergies: newPatient.allergies ? newPatient.allergies.split(',').map(a => a.trim()).filter(Boolean) : [],
-      conditions: newPatient.conditions ? newPatient.conditions.split(',').map(c => c.trim()).filter(Boolean) : [],
+      name: newName,
+      dob: newDob,
+      age: computedAge,
+      gender: newGender.toLowerCase() as any,
+      phone: newPhone,
+      bloodGroup: newBloodGroup,
+      allergies: allergiesList,
+      conditions: conditionsList,
+      mrn: String(102350 + patients.length),
+      lastVisit: 'Today',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    savePatients([patient, ...patients])
-    setShowForm(false)
-    setNewPatient({ name: '', dob: '', gender: 'male', phone: '', email: '', bloodGroup: 'O+', address: '', allergies: '', conditions: '' })
+
+    const updated = [newPatient, ...patients]
+    setPatients(updated)
+    localStorage.setItem('medtrust_patients', JSON.stringify(updated))
+    setNewName('')
+    setShowAddForm(false)
+  }
+
+  const handleAddAllergy = () => {
+    if (!inputAllergy.trim()) return
+    setAllergiesList([...allergiesList, inputAllergy.trim()])
+    setInputAllergy('')
+    setShowAllergyInput(false)
+  }
+
+  const handleAddCondition = () => {
+    if (!inputCondition.trim()) return
+    setConditionsList([...conditionsList, inputCondition.trim()])
+    setInputCondition('')
+    setShowConditionInput(false)
   }
 
   return (
-    <div>
-      <div className="section-header">
-        <div>
-          <h1 className="section-title">Patient Management</h1>
-          <p className="section-subtitle">{patients.length} registered patients</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Top Header Matching Screen 3 */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>👤</span>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>
+            Patient Management
+          </h1>
         </div>
-        <button id="new-patient-btn" className="btn btn-primary" onClick={() => setShowForm(true)}>
-          + New Patient
-        </button>
-      </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: 20 }}>
-        <div className="search-bar">
-          <span className="search-icon" style={{ fontSize: 16 }}>🔍</span>
-          <input
-            id="patient-search"
-            className="search-input"
-            placeholder="Search by name, phone, condition..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%' }}
-          />
-        </div>
-      </div>
+        {/* Search bar & Add New Patient button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, maxWidth: 540, justifyContent: 'flex-end' }}>
+          <div style={{
+            position: 'relative',
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+          }}>
+            <span style={{ position: 'absolute', left: 12, color: 'var(--color-text-muted)', fontSize: 14 }}>🔍</span>
+            <input
+              className="form-input"
+              placeholder="Search patients..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ paddingLeft: 36, borderRadius: 8, height: 38, fontSize: 13 }}
+            />
+          </div>
 
-      {/* Patient table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Patient</th>
-                <th>Age / Gender</th>
-                <th>Blood Group</th>
-                <th>Contact</th>
-                <th>Conditions</th>
-                <th>Allergies</th>
-                <th>Last Updated</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 40 }}>
-                    No patients found. Add your first patient to get started.
-                  </td>
-                </tr>
-              )}
-              {filtered.map(p => (
-                <tr key={p.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div className="avatar avatar-teal" style={{ width: 36, height: 36, fontSize: 13 }}>
-                        {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-text-primary)' }}>{p.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{p.email || 'No email'}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div>{p.age} years</div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>{p.gender}</div>
-                  </td>
-                  <td>
-                    <span className="badge badge-blue">{p.bloodGroup || '—'}</span>
-                  </td>
-                  <td style={{ fontSize: 13 }}>{p.phone}</td>
-                  <td>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {p.conditions.length === 0
-                        ? <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>None</span>
-                        : p.conditions.map(c => <span key={c} className="badge badge-muted" style={{ fontSize: 11 }}>{c}</span>)
-                      }
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {p.allergies.length === 0
-                        ? <span style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 600 }}>NKDA</span>
-                        : p.allergies.map(a => <span key={a} className="badge badge-warning" style={{ fontSize: 11 }}>⚠ {a}</span>)
-                      }
-                    </div>
-                  </td>
-                  <td style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    {new Date(p.updatedAt).toLocaleDateString('en-IN')}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => navigate(`/consultation?patient=${p.id}`)}
-                      >📹</button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => navigate(`/history/${p.id}`)}
-                      >📋</button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => setSelectedPatient(p)}
-                      >👁</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <button
+            onClick={() => setShowAddForm(true)}
+            style={{
+              padding: '9px 18px',
+              background: '#2563EB',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 10px rgba(37,99,235,0.3)',
+            }}
+          >
+            + Add New Patient
+          </button>
         </div>
       </div>
 
-      {/* New Patient Modal */}
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <div className="modal-title">Register New Patient</div>
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 4 }}>Enter patient demographics and medical information</p>
-              </div>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowForm(false)}>✕</button>
-            </div>
-
-            <div className="grid grid-2" style={{ gap: 16, marginBottom: 16 }}>
-              <div className="form-group">
-                <label className="form-label">Full Name *</label>
-                <input id="patient-name" className="form-input" placeholder="Enter full name" value={newPatient.name} onChange={e => setNewPatient(p => ({ ...p, name: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Date of Birth *</label>
-                <input id="patient-dob" type="date" className="form-input" value={newPatient.dob} onChange={e => setNewPatient(p => ({ ...p, dob: e.target.value }))} />
-                {newPatient.dob && <div style={{ fontSize: 12, color: 'var(--color-teal)', marginTop: 4 }}>Age: {calculateAge(newPatient.dob)} years</div>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Gender</label>
-                <select className="form-select" value={newPatient.gender} onChange={e => setNewPatient(p => ({ ...p, gender: e.target.value as Patient['gender'] }))}>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Blood Group</label>
-                <select className="form-select" value={newPatient.bloodGroup} onChange={e => setNewPatient(p => ({ ...p, bloodGroup: e.target.value }))}>
-                  {BLOOD_GROUPS.map(bg => <option key={bg} value={bg}>{bg}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Phone Number *</label>
-                <input className="form-input" placeholder="+91 XXXXX XXXXX" value={newPatient.phone} onChange={e => setNewPatient(p => ({ ...p, phone: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Email Address</label>
-                <input className="form-input" type="email" placeholder="patient@email.com" value={newPatient.email} onChange={e => setNewPatient(p => ({ ...p, email: e.target.value }))} />
-              </div>
-            </div>
-
-            <div className="grid grid-2" style={{ gap: 16, marginBottom: 20 }}>
-              <div className="form-group">
-                <label className="form-label">Known Allergies</label>
-                <input className="form-input" placeholder="Penicillin, Sulfa (comma separated)" value={newPatient.allergies} onChange={e => setNewPatient(p => ({ ...p, allergies: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Medical Conditions</label>
-                <input className="form-input" placeholder="Hypertension, Diabetes (comma separated)" value={newPatient.conditions} onChange={e => setNewPatient(p => ({ ...p, conditions: e.target.value }))} />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button
-                id="save-patient-btn"
-                className="btn btn-primary"
-                disabled={!newPatient.name || !newPatient.phone}
-                onClick={addPatient}
+      {/* Patient Table Matching Screen 3 */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+          <thead>
+            <tr style={{
+              background: 'rgba(255,255,255,0.02)',
+              borderBottom: '1px solid var(--color-border)',
+              color: 'var(--color-text-muted)',
+              fontSize: 12,
+              fontWeight: 600,
+            }}>
+              <th style={{ padding: '12px 16px' }}>Name</th>
+              <th style={{ padding: '12px 16px' }}>Age/Gender</th>
+              <th style={{ padding: '12px 16px' }}>MRN</th>
+              <th style={{ padding: '12px 16px' }}>Phone</th>
+              <th style={{ padding: '12px 16px' }}>Last Visit</th>
+              <th style={{ padding: '12px 16px', textAlign: 'center' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPatients.map((p) => (
+              <tr
+                key={p.id}
+                style={{
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  transition: 'background 0.15s',
+                  cursor: 'pointer',
+                }}
+                onClick={() => navigate('/consultation')}
               >
-                + Register Patient
-              </button>
+                {/* Name with Avatar */}
+                <td style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, rgba(37,99,235,0.3), rgba(0,212,170,0.3))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-teal)',
+                      fontWeight: 700,
+                      fontSize: 12,
+                    }}>
+                      {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{p.name}</span>
+                  </div>
+                </td>
+
+                {/* Age/Gender */}
+                <td style={{ padding: '14px 16px', color: 'var(--color-text-secondary)' }}>
+                  {p.age}{p.gender === 'male' ? 'M' : 'F'}
+                </td>
+
+                {/* MRN */}
+                <td style={{ padding: '14px 16px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                  {p.mrn}
+                </td>
+
+                {/* Phone */}
+                <td style={{ padding: '14px 16px', color: 'var(--color-text-secondary)' }}>
+                  {p.phone}
+                </td>
+
+                {/* Last Visit */}
+                <td style={{ padding: '14px 16px', color: 'var(--color-text-secondary)' }}>
+                  {p.lastVisit || '12 Apr 2025'}
+                </td>
+
+                {/* Actions 3 dots */}
+                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/history/${p.id}`)
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--color-text-muted)',
+                      fontSize: 18,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ⋮
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add New Patient Form Matching Screen 3 */}
+      {showAddForm && (
+        <div className="card" style={{ padding: 22, marginTop: 4 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16,
+            borderBottom: '1px solid var(--color-border)',
+            paddingBottom: 10,
+          }}>
+            <h2 style={{ fontSize: 15, fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>
+              Add New Patient
+            </h2>
+            <button
+              onClick={() => setShowAddForm(false)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16 }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+            {/* Left Column of inputs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Row 1: Name and Date of Birth */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: 11 }}>Name *</label>
+                  <input
+                    className="form-input"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: 11 }}>Date of Birth *</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={newDob}
+                    onChange={e => setNewDob(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Gender and Phone Number */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: 11 }}>Gender *</label>
+                  <select
+                    className="form-select"
+                    value={newGender}
+                    onChange={e => setNewGender(e.target.value)}
+                  >
+                    <option>Female</option>
+                    <option>Male</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: 11 }}>Phone Number</label>
+                  <input
+                    className="form-input"
+                    value={newPhone}
+                    onChange={e => setNewPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Row 3: Blood Group */}
+              <div style={{ width: '48%' }}>
+                <label className="form-label" style={{ fontSize: 11 }}>Blood Group *</label>
+                <select
+                  className="form-select"
+                  value={newBloodGroup}
+                  onChange={e => setNewBloodGroup(e.target.value)}
+                >
+                  <option>O+</option>
+                  <option>O-</option>
+                  <option>A+</option>
+                  <option>A-</option>
+                  <option>B+</option>
+                  <option>B-</option>
+                  <option>AB+</option>
+                  <option>AB-</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Right Column: Auto-Calculated Age Box, Medical Conditions, Allergies */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Prominent Auto-Calculated Age Card Matching Screen 3 */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                padding: '12px 18px',
+                background: 'rgba(37, 99, 235, 0.08)',
+                border: '1px solid rgba(37, 99, 235, 0.25)',
+                borderRadius: 8,
+              }}>
+                <span style={{ fontSize: 28 }}>📅</span>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                    Auto-Calculated Age
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                    {computedAge} years
+                  </div>
+                </div>
+              </div>
+
+              {/* Medical Conditions Tags */}
+              <div>
+                <label className="form-label" style={{ fontSize: 11 }}>Medical Conditions</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  {conditionsList.map((c, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(0, 212, 170, 0.08)',
+                        border: '1px solid rgba(0, 212, 170, 0.25)',
+                        color: 'var(--color-teal)',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      {c}
+                      <span
+                        onClick={() => setConditionsList(conditionsList.filter((_, idx) => idx !== i))}
+                        style={{ cursor: 'pointer', opacity: 0.7 }}
+                      >
+                        ✕
+                      </span>
+                    </span>
+                  ))}
+
+                  {showConditionInput ? (
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      <input
+                        className="form-input"
+                        placeholder="Condition..."
+                        value={inputCondition}
+                        onChange={e => setInputCondition(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddCondition()}
+                        style={{ width: 110, padding: '2px 8px', fontSize: 11 }}
+                        autoFocus
+                      />
+                      <button className="btn btn-sm btn-primary" onClick={handleAddCondition} style={{ padding: '2px 8px', fontSize: 11 }}>✓</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowConditionInput(true)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Allergies Tags */}
+              <div>
+                <label className="form-label" style={{ fontSize: 11 }}>Allergies</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  {allergiesList.map((a, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(59, 130, 246, 0.12)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        color: '#60A5FA',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      {a}
+                      <span
+                        onClick={() => setAllergiesList(allergiesList.filter((_, idx) => idx !== i))}
+                        style={{ cursor: 'pointer', opacity: 0.7 }}
+                      >
+                        ✕
+                      </span>
+                    </span>
+                  ))}
+
+                  {showAllergyInput ? (
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      <input
+                        className="form-input"
+                        placeholder="Allergy..."
+                        value={inputAllergy}
+                        onChange={e => setInputAllergy(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddAllergy()}
+                        style={{ width: 100, padding: '2px 8px', fontSize: 11 }}
+                        autoFocus
+                      />
+                      <button className="btn btn-sm btn-primary" onClick={handleAddAllergy} style={{ padding: '2px 8px', fontSize: 11 }}>✓</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowAllergyInput(true)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Patient detail modal */}
-      {selectedPatient && (
-        <div className="modal-overlay" onClick={() => setSelectedPatient(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div className="avatar avatar-teal avatar-lg">{selectedPatient.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
-                <div>
-                  <div className="modal-title">{selectedPatient.name}</div>
-                  <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    {selectedPatient.age} years · {selectedPatient.gender} · {selectedPatient.bloodGroup}
-                  </p>
-                </div>
-              </div>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setSelectedPatient(null)}>✕</button>
-            </div>
-
-            <div className="grid grid-2" style={{ gap: 12 }}>
-              {[
-                ['Phone', selectedPatient.phone],
-                ['Email', selectedPatient.email || '—'],
-                ['Blood Group', selectedPatient.bloodGroup || '—'],
-                ['Date of Birth', selectedPatient.dob],
-              ].map(([l, v]) => (
-                <div key={l} style={{ padding: 12, background: 'var(--color-bg-glass)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: 4 }}>{l}</div>
-                  <div style={{ fontSize: 14, color: 'var(--color-text-primary)' }}>{v}</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: 8 }}>ALLERGIES</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {selectedPatient.allergies.length === 0
-                  ? <span className="badge badge-success">NKDA</span>
-                  : selectedPatient.allergies.map(a => <span key={a} className="badge badge-warning">⚠ {a}</span>)}
-              </div>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: 8 }}>CONDITIONS</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {selectedPatient.conditions.length === 0
-                  ? <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>None documented</span>
-                  : selectedPatient.conditions.map(c => <span key={c} className="badge badge-info">{c}</span>)}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => { setSelectedPatient(null); navigate('/consultation') }}>
-                📹 Start Consultation
-              </button>
-              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setSelectedPatient(null); navigate(`/history/${selectedPatient.id}`) }}>
-                📋 View History
-              </button>
-            </div>
+          {/* Form Actions Matching Screen 3 */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+            <button
+              onClick={() => setShowAddForm(false)}
+              style={{
+                padding: '9px 18px',
+                background: 'transparent',
+                color: 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSavePatient}
+              style={{
+                padding: '9px 22px',
+                background: '#2563EB',
+                color: 'white',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 10px rgba(37,99,235,0.4)',
+              }}
+            >
+              Save Patient
+            </button>
           </div>
         </div>
       )}

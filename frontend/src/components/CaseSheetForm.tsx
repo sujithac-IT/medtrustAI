@@ -1,563 +1,1054 @@
 import React, { useState, useRef } from 'react'
 import type { CaseSheet, MedicationRow } from '../types'
-import { SUPPORTED_LANGUAGES } from '../i18n/config'
+import hospitalLogoImg from '../assets/hospital_logo.jpg'
 
 interface CaseSheetFormProps {
   caseSheet: CaseSheet
   onUpdate: (updated: CaseSheet) => void
-  onApprove: () => void
-  isDoctor: boolean
+  onApprove?: () => void
+  isDoctor?: boolean
+  onBack?: () => void
 }
 
-const SECTION_ICONS: Record<string, string> = {
-  patientInfo: '👤', chiefComplaint: '🏥', hpi: '📝', symptoms: '🩺',
-  duration: '⏱️', pastMedicalHistory: '📜', medications: '💊', allergies: '⚠️',
-  familyHistory: '👨‍👩‍👧', socialHistory: '🏠', doctorObservations: '🔬',
-  investigations: '🧪', assessment: '🎯', treatmentPlan: '💉',
-  followUp: '📅', missingInformation: '❓', uncertainInformation: '⚠️',
-}
+const SECTIONS_NAV = [
+  { id: 'sec-1', name: '1. Patient Info' },
+  { id: 'sec-2', name: '2. Chief Complaint' },
+  { id: 'sec-3', name: '3. HPI' },
+  { id: 'sec-4', name: '4. Symptoms & Severity' },
+  { id: 'sec-5', name: '5. Duration & Onset' },
+  { id: 'sec-6', name: '6. Past Medical History' },
+  { id: 'sec-7', name: '7. Current Medications' },
+  { id: 'sec-8', name: '8. Allergies & Reactions' },
+  { id: 'sec-9', name: '9. Family History' },
+  { id: 'sec-10', name: '10. Social / Occupational' },
+  { id: 'sec-11', name: '11. Doctor Observations' },
+  { id: 'sec-12', name: '12. Investigations' },
+  { id: 'sec-13', name: '13. Assessment' },
+  { id: 'sec-14', name: '14. Treatment Plan' },
+  { id: 'sec-15', name: '15. Follow-up & Red Flags' },
+  { id: 'sec-16', name: '16. Missing Information' },
+  { id: 'sec-17', name: '17. Uncertain Information' },
+]
 
-export default function CaseSheetForm({ caseSheet, onUpdate, onApprove, isDoctor }: CaseSheetFormProps) {
-  const [isEditing, setIsEditing] = useState(!caseSheet.isReadOnly)
-  const [activeSection, setActiveSection] = useState(0)
-  const [ttsLang, setTtsLang] = useState('en')
-  const [speaking, setSpeaking] = useState(false)
-  const [showApprovalModal, setShowApprovalModal] = useState(false)
-  const [approvalChecks, setApprovalChecks] = useState({ reviewed: false, accurate: false, treatment: false })
+export default function CaseSheetForm({
+  caseSheet,
+  onUpdate,
+  onBack,
+}: CaseSheetFormProps) {
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit')
+  const [activeNav, setActiveNav] = useState('sec-1')
+  const [saveToast, setSaveToast] = useState(false)
+  const [newMedModal, setNewMedModal] = useState(false)
+  const [newMed, setNewMed] = useState<MedicationRow>({
+    name: '',
+    dosage: '',
+    frequency: 'OD',
+    route: 'Oral',
+    duration: 'Long-term',
+  })
+
+  // Tag inputs
+  const [newAllergy, setNewAllergy] = useState('')
+  const [showAllergyInput, setShowAllergyInput] = useState(false)
+  const [newCondition, setNewCondition] = useState('')
+  const [showConditionInput, setShowConditionInput] = useState(false)
+  const [newFamily, setNewFamily] = useState('')
+  const [showFamilyInput, setShowFamilyInput] = useState(false)
+
   const printRef = useRef<HTMLDivElement>(null)
 
-  const update = (field: string, value: unknown) => {
-    if (caseSheet.isReadOnly) return
-    onUpdate({ ...caseSheet, [field]: value })
+  const handleFieldChange = (field: keyof CaseSheet, value: any) => {
+    onUpdate({
+      ...caseSheet,
+      [field]: value,
+    })
   }
 
-  const updateField = (section: string, field: string, value: unknown) => {
-    const sectionObj = ((caseSheet as unknown as Record<string, unknown>)[section] || {}) as Record<string, unknown>
-    const updated = { ...caseSheet, [section]: { ...sectionObj, [field]: value } }
-    onUpdate(updated as CaseSheet)
+  const handlePatientInfoChange = (field: string, value: string) => {
+    onUpdate({
+      ...caseSheet,
+      patientInfo: {
+        ...caseSheet.patientInfo,
+        [field]: value,
+      },
+      patientName: field === 'name' ? value : caseSheet.patientName,
+    })
   }
 
-  const speak = (text: string, lang: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      const utter = new SpeechSynthesisUtterance(text)
-      const langCode = SUPPORTED_LANGUAGES.find(l => l.code === lang)?.speechCode || 'en-IN'
-      utter.lang = langCode
-      utter.rate = 0.9
-      utter.onstart = () => setSpeaking(true)
-      utter.onend = () => setSpeaking(false)
-      window.speechSynthesis.speak(utter)
-    }
+  const handleDeleteMedication = (index: number) => {
+    const updated = [...(caseSheet.medications || [])]
+    updated.splice(index, 1)
+    onUpdate({ ...caseSheet, medications: updated })
   }
 
-  const handlePrint = () => window.print()
+  const handleAddMedication = () => {
+    if (!newMed.name) return
+    const updated = [...(caseSheet.medications || []), newMed]
+    onUpdate({ ...caseSheet, medications: updated })
+    setNewMed({ name: '', dosage: '', frequency: 'OD', route: 'Oral', duration: 'Long-term' })
+    setNewMedModal(false)
+  }
 
-  const allChecked = Object.values(approvalChecks).every(Boolean)
+  const handleAddAllergy = () => {
+    if (!newAllergy.trim()) return
+    const updated = [...(caseSheet.allergies || []), newAllergy.trim()]
+    onUpdate({ ...caseSheet, allergies: updated })
+    setNewAllergy('')
+    setShowAllergyInput(false)
+  }
 
-  const sections = [
-    'patientInfo', 'chiefComplaint', 'hpi', 'symptoms', 'duration',
-    'pastMedicalHistory', 'medications', 'allergies', 'familyHistory',
-    'socialHistory', 'doctorObservations', 'investigations',
-    'assessment', 'treatmentPlan', 'followUp',
-    'missingInformation', 'uncertainInformation',
-  ]
+  const handleRemoveAllergy = (index: number) => {
+    const updated = [...(caseSheet.allergies || [])]
+    updated.splice(index, 1)
+    onUpdate({ ...caseSheet, allergies: updated })
+  }
 
-  return (
-    <div style={{ display: 'flex', height: '100%', gap: 0 }}>
-      {/* Section navigator */}
-      <div style={{
-        width: 200,
-        flexShrink: 0,
-        borderRight: '1px solid var(--color-border)',
-        overflowY: 'auto',
-        padding: '8px 0',
-      }}>
-        {sections.map((s, i) => (
-          <button
-            key={s}
-            onClick={() => {
-              setActiveSection(i)
-              document.getElementById(`section-${s}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              width: '100%',
-              padding: '8px 12px',
-              background: activeSection === i ? 'var(--color-teal-dim)' : 'transparent',
-              border: 'none',
-              borderLeft: `3px solid ${activeSection === i ? 'var(--color-teal)' : 'transparent'}`,
-              color: activeSection === i ? 'var(--color-teal)' : 'var(--color-text-muted)',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: activeSection === i ? 700 : 500,
-              textAlign: 'left',
-              transition: 'all 0.15s',
-            }}
-          >
-            <span>{SECTION_ICONS[s] || '📋'}</span>
-            <span style={{ lineHeight: 1.2 }}>
-              {s.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-            </span>
-          </button>
-        ))}
-      </div>
+  const handleAddCondition = () => {
+    if (!newCondition.trim()) return
+    const current = caseSheet.pastMedicalHistory ? caseSheet.pastMedicalHistory.split(',').map(s => s.trim()) : []
+    current.push(newCondition.trim())
+    onUpdate({ ...caseSheet, pastMedicalHistory: current.join(', ') })
+    setNewCondition('')
+    setShowConditionInput(false)
+  }
 
-      {/* Main form area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
-        {/* Toolbar */}
+  const handleAddFamily = () => {
+    if (!newFamily.trim()) return
+    const current = caseSheet.familyHistory ? caseSheet.familyHistory.split(',').map(s => s.trim()) : []
+    current.push(newFamily.trim())
+    onUpdate({ ...caseSheet, familyHistory: current.join(', ') })
+    setNewFamily('')
+    setShowFamilyInput(false)
+  }
+
+  const handleSaveChanges = () => {
+    setSaveToast(true)
+    setTimeout(() => setSaveToast(false), 2500)
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  const pInfo = caseSheet.patientInfo || {
+    name: 'K. Sundaram',
+    age: '58',
+    gender: 'Male',
+    bloodGroup: 'B+',
+    phone: '+91 98765 43210',
+    address: 'No. 12, Gandhi Nagar, Madurai',
+    mrn: '102345',
+    dob: '1966-04-12',
+  }
+
+  const historyConditions = caseSheet.pastMedicalHistory
+    ? caseSheet.pastMedicalHistory.split(',').map(s => s.trim()).filter(Boolean)
+    : ['Hypertension', 'Type 2 Diabetes']
+
+  const familyHistoryList = caseSheet.familyHistory
+    ? caseSheet.familyHistory.split(',').map(s => s.trim()).filter(Boolean)
+    : ['Father - Diabetes']
+
+  // ─── Preview Mode: Screen 5 (Apollo MedTrust Clinical Case Sheet) ───────────
+  if (viewMode === 'preview') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 14, overflowY: 'auto' }}>
+        {/* Top bar */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '12px 0',
-          borderBottom: '1px solid var(--color-border)',
-          marginBottom: 20,
-          position: 'sticky',
-          top: 0,
-          background: 'var(--color-bg-primary)',
-          zIndex: 10,
+          padding: '10px 16px',
+          background: 'var(--color-bg-glass)',
+          borderRadius: 10,
+          border: '1px solid var(--color-border)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>📋</span>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--color-text-primary)' }}>Clinical Case Sheet</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                {caseSheet.isApproved ? `✅ Approved by ${caseSheet.approvedBy}` : '⏳ Pending doctor approval'}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {/* TTS */}
-            <select
-              value={ttsLang}
-              onChange={e => setTtsLang(e.target.value)}
-              className="form-select"
-              style={{ width: 'auto', padding: '6px 32px 6px 10px', fontSize: 12 }}
-            >
-              {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-            </select>
+          <button
+            onClick={() => setViewMode('edit')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-text-primary)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            ← Back to Edit
+          </button>
+
+          <div style={{ display: 'flex', gap: 10 }}>
             <button
-              className={`btn ${speaking ? 'btn-danger' : 'btn-secondary'} btn-sm`}
-              onClick={() => {
-                if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false) }
-                else {
-                  const summary = (caseSheet.summaries as Record<string, string> | undefined)?.[ttsLang] ||
-                    `Patient ${caseSheet.patientName}. Chief complaint: ${caseSheet.chiefComplaint}. Assessment: ${caseSheet.assessment}. Treatment: ${caseSheet.treatmentPlan}`
-                  speak(summary, ttsLang)
-                }
+              onClick={handlePrint}
+              style={{
+                padding: '8px 16px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: 'white',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
-              {speaking ? '⏹ Stop' : '🔊 Read'}
+              🖨️ Print
             </button>
-
-            {!caseSheet.isReadOnly && isDoctor && (
-              <button
-                className={`btn ${isEditing ? 'btn-secondary' : 'btn-primary'} btn-sm`}
-                onClick={() => setIsEditing(!isEditing)}
-              >
-                {isEditing ? '👁 Preview' : '✏️ Edit'}
-              </button>
-            )}
-
-            <button className="btn btn-ghost btn-sm" onClick={handlePrint}>🖨️ Print</button>
-
-            {!caseSheet.isApproved && isDoctor && (
-              <button
-                id="approve-case-sheet-btn"
-                className="btn btn-primary btn-sm"
-                onClick={() => setShowApprovalModal(true)}
-                style={{ background: 'linear-gradient(135deg, #22C55E, #16A34A)', boxShadow: '0 4px 14px rgba(34,197,94,0.3)' }}
-              >
-                ✅ Approve
-              </button>
-            )}
-
-            {caseSheet.isApproved && (
-              <span className="badge badge-success badge-dot">Approved</span>
-            )}
+            <button
+              onClick={handlePrint}
+              style={{
+                padding: '8px 16px',
+                background: '#2563EB',
+                color: 'white',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 2px 10px rgba(37,99,235,0.3)',
+              }}
+            >
+              📥 Download PDF
+            </button>
           </div>
         </div>
 
-        {/* Printable content */}
-        <div ref={printRef} id="case-sheet-print">
-          {/* Print header */}
-          <div className="no-print" style={{ display: 'none' }} />
+        {/* Paper Sheet Matching Screen 5 */}
+        <div
+          ref={printRef}
+          id="clinical-case-sheet-paper"
+          style={{
+            background: '#FFFFFF',
+            color: '#0F172A',
+            padding: '40px 48px',
+            borderRadius: 8,
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.25)',
+            maxWidth: 960,
+            margin: '0 auto',
+            width: '100%',
+            position: 'relative',
+            fontFamily: 'Inter, system-ui, sans-serif',
+          }}
+        >
+          {/* Watermark */}
           <div style={{
-            padding: '0 0 20px',
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${hospitalLogoImg})`,
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: '320px',
+            opacity: 0.04,
+            pointerEvents: 'none',
+          }} />
+
+          {/* Hospital Letterhead */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '2px solid #2563EB',
+            paddingBottom: 20,
             marginBottom: 20,
-            borderBottom: '2px solid var(--color-border)',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <img
+                src={hospitalLogoImg}
+                alt="Hospital Logo"
+                style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain' }}
+              />
               <div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-teal)' }}>⚕️ MedTrust AI</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Clinical Intelligence Platform</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Generated: {new Date(caseSheet.generatedAt).toLocaleString()}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Doctor: {caseSheet.doctorName}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Case ID: {caseSheet.id}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 1: Patient Info */}
-          <SectionCard id="section-patientInfo" icon="👤" title="Patient Information" number={1}>
-            <div className="grid grid-3" style={{ gap: 12 }}>
-              {Object.entries(caseSheet.patientInfo).map(([k, v]) => (
-                <EditField key={k} label={k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())} value={v} editing={isEditing && !caseSheet.isReadOnly} onChange={val => updateField('patientInfo', k, val)} />
-              ))}
-            </div>
-          </SectionCard>
-
-          {/* Section 2: Chief Complaint */}
-          <SectionCard id="section-chiefComplaint" icon="🏥" title="Chief Complaint" number={2}>
-            <EditField label="Chief complaint" value={caseSheet.chiefComplaint} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('chiefComplaint', val)} multiline />
-          </SectionCard>
-
-          {/* Section 3: HPI */}
-          <SectionCard id="section-hpi" icon="📝" title="History of Present Illness (HPI)" number={3}>
-            <EditField label="HPI" value={caseSheet.hpi} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('hpi', val)} multiline rows={4} />
-          </SectionCard>
-
-          {/* Section 4: Symptoms */}
-          <SectionCard id="section-symptoms" icon="🩺" title="Symptoms" number={4}>
-            <ListEditor items={caseSheet.symptoms} editing={isEditing && !caseSheet.isReadOnly} color="blue" onChange={val => update('symptoms', val)} />
-          </SectionCard>
-
-          {/* Section 5: Duration */}
-          <SectionCard id="section-duration" icon="⏱️" title="Duration" number={5}>
-            <EditField label="Duration" value={caseSheet.duration} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('duration', val)} />
-          </SectionCard>
-
-          {/* Section 6: Past Medical History */}
-          <SectionCard id="section-pastMedicalHistory" icon="📜" title="Past Medical History" number={6}>
-            <EditField label="Past medical history" value={caseSheet.pastMedicalHistory} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('pastMedicalHistory', val)} multiline />
-          </SectionCard>
-
-          {/* Section 7: Medications */}
-          <SectionCard id="section-medications" icon="💊" title="Current Medications" number={7}>
-            <MedicationsTable
-              rows={caseSheet.medications}
-              editing={isEditing && !caseSheet.isReadOnly}
-              onChange={val => update('medications', val)}
-            />
-          </SectionCard>
-
-          {/* Section 8: Allergies */}
-          <SectionCard id="section-allergies" icon="⚠️" title="Allergies" number={8}>
-            <ListEditor items={caseSheet.allergies} editing={isEditing && !caseSheet.isReadOnly} color="warning" onChange={val => update('allergies', val)} />
-          </SectionCard>
-
-          {/* Section 9: Family History */}
-          <SectionCard id="section-familyHistory" icon="👨‍👩‍👧" title="Family History" number={9}>
-            <EditField label="Family history" value={caseSheet.familyHistory} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('familyHistory', val)} multiline />
-          </SectionCard>
-
-          {/* Section 10: Social History */}
-          <SectionCard id="section-socialHistory" icon="🏠" title="Social History" number={10}>
-            <EditField label="Social history" value={caseSheet.socialHistory} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('socialHistory', val)} multiline />
-          </SectionCard>
-
-          {/* Section 11: Doctor Observations */}
-          <SectionCard id="section-doctorObservations" icon="🔬" title="Doctor Observations & Examination" number={11}>
-            <EditField label="Observations" value={caseSheet.doctorObservations} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('doctorObservations', val)} multiline rows={4} />
-          </SectionCard>
-
-          {/* Section 12: Investigations */}
-          <SectionCard id="section-investigations" icon="🧪" title="Investigations Ordered" number={12}>
-            <ListEditor items={caseSheet.investigations} editing={isEditing && !caseSheet.isReadOnly} color="info" onChange={val => update('investigations', val)} />
-          </SectionCard>
-
-          {/* Section 13: Assessment */}
-          <SectionCard id="section-assessment" icon="🎯" title="Assessment / Diagnosis" number={13}>
-            <EditField label="Assessment" value={caseSheet.assessment} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('assessment', val)} multiline rows={3} />
-          </SectionCard>
-
-          {/* Section 14: Treatment Plan */}
-          <SectionCard id="section-treatmentPlan" icon="💉" title="Treatment Plan" number={14}>
-            <EditField label="Treatment plan" value={caseSheet.treatmentPlan} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('treatmentPlan', val)} multiline rows={4} />
-          </SectionCard>
-
-          {/* Section 15: Follow-up */}
-          <SectionCard id="section-followUp" icon="📅" title="Follow-up Instructions" number={15}>
-            <EditField label="Follow-up" value={caseSheet.followUp} editing={isEditing && !caseSheet.isReadOnly} onChange={val => update('followUp', val)} multiline />
-          </SectionCard>
-
-          {/* Section 16: Missing Information */}
-          <SectionCard id="section-missingInformation" icon="❓" title="Missing Information" number={16} accent="warning">
-            <ListEditor items={caseSheet.missingInformation} editing={isEditing && !caseSheet.isReadOnly} color="warning" onChange={val => update('missingInformation', val)} />
-          </SectionCard>
-
-          {/* Section 17: Uncertain Information */}
-          <SectionCard id="section-uncertainInformation" icon="⚠️" title="Uncertain Information" number={17} accent="danger">
-            <ListEditor items={caseSheet.uncertainInformation} editing={isEditing && !caseSheet.isReadOnly} color="danger" onChange={val => update('uncertainInformation', val)} />
-          </SectionCard>
-
-          {/* Approval signature block */}
-          {caseSheet.isApproved && (
-            <div style={{
-              marginTop: 24,
-              padding: '20px',
-              background: 'var(--color-success-dim)',
-              border: '1px solid rgba(34,197,94,0.3)',
-              borderRadius: 'var(--radius-lg)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 32 }}>✅</span>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-success)' }}>Clinically Approved</div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                    Approved by <strong>{caseSheet.approvedBy}</strong> on {caseSheet.approvedAt && new Date(caseSheet.approvedAt).toLocaleString()}
-                  </div>
+                <h1 style={{
+                  fontSize: 22,
+                  fontWeight: 900,
+                  color: '#1E3A8A',
+                  margin: 0,
+                  letterSpacing: '-0.02em',
+                }}>
+                  Apollo MedTrust
+                </h1>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#3B82F6', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  University Teaching Hospital
                 </div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Approval Modal */}
-      {showApprovalModal && (
-        <div className="modal-overlay" onClick={() => setShowApprovalModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+            <div style={{ textAlign: 'right' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Clinical Case Sheet
+              </h2>
+              <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
+                Department of Cardiology • Medical Records
+              </div>
+            </div>
+          </div>
+
+          {/* Patient Metadata Box */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 12,
+            padding: '14px 18px',
+            background: '#F8FAFC',
+            borderRadius: 6,
+            border: '1px solid #E2E8F0',
+            marginBottom: 24,
+            fontSize: 12,
+          }}>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 600 }}>Patient Name : </span>
+              <strong style={{ color: '#0F172A' }}>{pInfo.name}</strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 600 }}>Date : </span>
+              <strong style={{ color: '#0F172A' }}>12-04-2025</strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 600 }}>Doctor : </span>
+              <strong style={{ color: '#0F172A' }}>{caseSheet.doctorName || 'Dr. Rajesh Sharma, MD'}</strong>
+            </div>
+
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 600 }}>Age / Gender : </span>
+              <strong style={{ color: '#0F172A' }}>{pInfo.age} / {pInfo.gender === 'Male' ? 'M' : 'F'}</strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 600 }}>MRN : </span>
+              <strong style={{ color: '#0F172A' }}>{pInfo.mrn || '102345'}</strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 600 }}>Dept : </span>
+              <strong style={{ color: '#0F172A' }}>Cardiology</strong>
+            </div>
+          </div>
+
+          {/* 2-Column Clinical Layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+            {/* Left Column (Sections 1 - 5) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* 1. Patient Information */}
               <div>
-                <div className="modal-title">Doctor Approval</div>
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                  Please review and confirm the clinical case sheet before approving
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  1. Patient Information
+                </h3>
+                <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
+                  <div>Blood Group : <strong>{pInfo.bloodGroup}</strong></div>
+                  <div>Contact : <strong>{pInfo.phone}</strong></div>
+                  <div>Address : {pInfo.address}</div>
+                </div>
+              </div>
+
+              {/* 2. Chief Complaint */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  2. Chief Complaint
+                </h3>
+                <p style={{ fontSize: 12, color: '#334155', margin: 0, lineHeight: 1.5 }}>
+                  {caseSheet.chiefComplaint}
                 </p>
               </div>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowApprovalModal(false)}>✕</button>
-            </div>
 
-            {/* Doctor credentials */}
-            <div style={{ background: 'var(--color-bg-glass)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className="avatar avatar-teal avatar-lg" style={{ fontSize: 26 }}>👨‍⚕️</div>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)' }}>{caseSheet.doctorName}</div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Internal Medicine · TN-MCI-12345</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>MedTrust AI Hospital · Chennai</div>
+              {/* 3. History of Present Illness */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  3. History of Present Illness (HPI)
+                </h3>
+                <p style={{ fontSize: 12, color: '#334155', margin: 0, lineHeight: 1.6 }}>
+                  {caseSheet.hpi}
+                </p>
+              </div>
+
+              {/* 4. Symptoms & Severity */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  4. Symptoms & Severity
+                </h3>
+                <div style={{ fontSize: 12, color: '#334155' }}>
+                  {caseSheet.symptoms && caseSheet.symptoms.length > 0 ? (
+                    caseSheet.symptoms.join(', ')
+                  ) : (
+                    'Chest pain (moderate), SOB (mild)'
+                  )}
                 </div>
+              </div>
+
+              {/* 5. Duration & Onset */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  5. Duration & Onset
+                </h3>
+                <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+                  {caseSheet.duration || '3 weeks, gradual onset'}
+                </p>
               </div>
             </div>
 
-            {/* Checklist */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
-              {[
-                { key: 'reviewed', label: 'I have reviewed all 17 sections of this case sheet' },
-                { key: 'accurate', label: 'The clinical information is accurate and complete to the best of my knowledge' },
-                { key: 'treatment', label: 'The treatment plan and medications are appropriate for this patient' },
-              ].map(item => (
-                <label key={item.key} className="checkbox-label" style={{ padding: '12px', background: 'var(--color-bg-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                  <input
-                    type="checkbox"
-                    checked={approvalChecks[item.key as keyof typeof approvalChecks]}
-                    onChange={e => setApprovalChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                  />
-                  <span style={{ fontSize: 13, color: 'var(--color-text-primary)' }}>{item.label}</span>
-                </label>
-              ))}
-            </div>
+            {/* Right Column (Sections 6 - 10) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* 6. Past Medical History */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  6. Past Medical History
+                </h3>
+                <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+                  {caseSheet.pastMedicalHistory}
+                </p>
+              </div>
 
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowApprovalModal(false)}>Cancel</button>
-              <button
-                id="confirm-approve-btn"
-                className="btn"
-                style={{
-                  flex: 2,
-                  background: allChecked ? 'linear-gradient(135deg, #22C55E, #16A34A)' : 'var(--color-bg-glass)',
-                  color: allChecked ? 'white' : 'var(--color-text-muted)',
-                  opacity: allChecked ? 1 : 0.6,
-                  cursor: allChecked ? 'pointer' : 'not-allowed',
-                  boxShadow: allChecked ? '0 4px 14px rgba(34,197,94,0.3)' : 'none',
-                }}
-                disabled={!allChecked}
-                onClick={() => { if (allChecked) { onApprove(); setShowApprovalModal(false) } }}
-              >
-                ✅ Sign & Approve Case Sheet
-              </button>
+              {/* 7. Current Medications */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  7. Current Medications
+                </h3>
+                <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
+                  {caseSheet.medications?.map((m, i) => (
+                    <div key={i}>
+                      • {m.name} {m.dosage} {m.frequency} {m.route || 'Oral'} ({m.duration})
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 8. Allergies & Reactions */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  8. Allergies & Reactions
+                </h3>
+                <p style={{ fontSize: 12, color: '#DC2626', margin: 0, fontWeight: 600 }}>
+                  {caseSheet.allergies?.join(', ') || 'Penicillin (rash)'}
+                </p>
+              </div>
+
+              {/* 9. Family History */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  9. Family History
+                </h3>
+                <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+                  {caseSheet.familyHistory}
+                </p>
+              </div>
+
+              {/* 10. Social / Occupational History */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1E293B', marginBottom: 4, textTransform: 'uppercase' }}>
+                  10. Social / Occupational History
+                </h3>
+                <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+                  {caseSheet.socialHistory}
+                </p>
+              </div>
             </div>
           </div>
+
+          {/* Footer */}
+          <div style={{
+            marginTop: 40,
+            paddingTop: 16,
+            borderTop: '1px solid #E2E8F0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: 11,
+            color: '#64748B',
+          }}>
+            <span>Apollo MedTrust University Teaching Hospital</span>
+            <span>Confidential Medical Record</span>
+          </div>
         </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Sub-components ────────────────────────────────────────────────────────────
-
-function SectionCard({ id, icon, title, number, accent, children }: {
-  id: string; icon: string; title: string; number: number; accent?: string; children: React.ReactNode
-}) {
-  return (
-    <div id={id} style={{ marginBottom: 20 }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        marginBottom: 12,
-        padding: '10px 14px',
-        background: accent === 'warning' ? 'var(--color-warning-dim)' : accent === 'danger' ? 'var(--color-danger-dim)' : 'var(--color-bg-glass)',
-        borderRadius: 'var(--radius-md)',
-        border: `1px solid ${accent === 'warning' ? 'rgba(245,158,11,0.2)' : accent === 'danger' ? 'rgba(239,68,68,0.2)' : 'var(--color-border)'}`,
-      }}>
-        <span style={{
-          width: 24, height: 24, borderRadius: '50%', background: 'var(--color-teal)',
-          color: 'var(--color-bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 800, flexShrink: 0,
-        }}>{number}</span>
-        <span style={{ fontSize: 18 }}>{icon}</span>
-        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--color-text-primary)' }}>{title}</span>
       </div>
-      <div style={{ paddingLeft: 14 }}>{children}</div>
-    </div>
-  )
-}
-
-function EditField({ label, value, editing, onChange, multiline = false, rows = 3 }: {
-  label: string; value: string; editing: boolean; onChange: (v: string) => void; multiline?: boolean; rows?: number
-}) {
-  if (editing) {
-    if (multiline) {
-      return (
-        <textarea
-          className="form-textarea"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          rows={rows}
-          placeholder={`Enter ${label.toLowerCase()}...`}
-        />
-      )
-    }
-    return (
-      <input
-        className="form-input"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={`Enter ${label.toLowerCase()}...`}
-      />
     )
   }
 
+  // ─── Edit Mode: Screen 2 (17-Section Case Sheet) ────────────────────────────
   return (
-    <div style={{
-      padding: '10px 12px',
-      background: 'var(--color-bg-glass)',
-      borderRadius: 'var(--radius-sm)',
-      border: '1px solid var(--color-border)',
-      fontSize: 14,
-      color: value ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-      lineHeight: 1.6,
-      whiteSpace: 'pre-wrap',
-    }}>
-      {value || 'Not documented'}
-    </div>
-  )
-}
-
-function ListEditor({ items, editing, color, onChange }: {
-  items: string[]; editing: boolean; color: string; onChange: (v: string[]) => void
-}) {
-  const [newItem, setNewItem] = useState('')
-
-  const addItem = () => {
-    if (newItem.trim()) { onChange([...items, newItem.trim()]); setNewItem('') }
-  }
-
-  const removeItem = (i: number) => onChange(items.filter((_, idx) => idx !== i))
-
-  const badgeClass = `badge-${color === 'warning' ? 'warning' : color === 'danger' ? 'danger' : color === 'info' ? 'info' : 'blue'}`
-
-  if (items.length === 0 && !editing) {
-    return <span style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None documented</span>
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: editing ? 10 : 0 }}>
-        {items.map((item, i) => (
-          <span key={i} className={`badge ${badgeClass}`} style={{ gap: 6 }}>
-            {item}
-            {editing && (
-              <button onClick={() => removeItem(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 11, lineHeight: 1 }}>✕</button>
-            )}
-          </span>
-        ))}
-      </div>
-      {editing && (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            className="form-input"
-            style={{ flex: 1 }}
-            value={newItem}
-            onChange={e => setNewItem(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addItem()}
-            placeholder="Add item..."
-          />
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Add</button>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12 }}>
+      {/* Top Header Matching Screen 2 */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '8px 16px',
+        background: 'var(--color-bg-glass)',
+        borderRadius: 10,
+        border: '1px solid var(--color-border)',
+        flexShrink: 0,
+      }}>
+        {/* Left: Back + Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={onBack}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-text-primary)',
+              fontSize: 18,
+              cursor: 'pointer',
+              padding: '4px 8px',
+            }}
+            title="Back"
+          >
+            ←
+          </button>
+          <h1 style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>
+            17-Section Case Sheet
+          </h1>
         </div>
-      )}
-    </div>
-  )
-}
 
-function MedicationsTable({ rows, editing, onChange }: { rows: MedicationRow[]; editing: boolean; onChange: (r: MedicationRow[]) => void }) {
-  const addRow = () => onChange([...rows, { name: '', dosage: '', frequency: '', duration: '' }])
-  const removeRow = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
-  const updateRow = (i: number, field: keyof MedicationRow, val: string) => {
-    const next = [...rows]
-    next[i] = { ...next[i], [field]: val }
-    onChange(next)
-  }
+        {/* Right: Mode switches + AI Generate + Share */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Edit Mode Button */}
+          <button
+            onClick={() => setViewMode('edit')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: '1px solid #2563EB',
+              background: viewMode === 'edit' ? '#2563EB' : 'transparent',
+              color: viewMode === 'edit' ? 'white' : 'var(--color-text-secondary)',
+            }}
+          >
+            Edit Mode
+          </button>
 
-  return (
-    <div>
-      <div className="table-container">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Medication</th><th>Dosage</th><th>Frequency</th><th>Duration</th>
-              {editing && <th style={{ width: 40 }}></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No medications listed</td></tr>
-            )}
-            {rows.map((row, i) => (
-              <tr key={i}>
-                {(['name', 'dosage', 'frequency', 'duration'] as const).map(f => (
-                  <td key={f}>
-                    {editing ? (
+          {/* Preview Mode Button */}
+          <button
+            onClick={() => setViewMode('preview')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: '1px solid var(--color-border)',
+              background: 'rgba(255,255,255,0.05)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            Preview Mode
+          </button>
+
+          {/* AI Generate Button */}
+          <button
+            onClick={handleSaveChanges}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: 'none',
+              background: '#2563EB',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+            }}
+          >
+            <span>🤖</span>
+            AI Generate
+          </button>
+
+          {/* Share/Export icon button */}
+          <button
+            onClick={handlePrint}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 6,
+              border: '1px solid var(--color-border)',
+              background: 'transparent',
+              color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 15,
+            }}
+            title="Export / Share"
+          >
+            ↗
+          </button>
+        </div>
+      </div>
+
+      {/* Main Area: Left subnav + 2-Column form */}
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr', gap: 14, minHeight: 0 }}>
+        {/* Left Sub-Navigation (1 to 17 sections) */}
+        <div style={{
+          background: 'var(--color-bg-glass)',
+          borderRadius: 10,
+          border: '1px solid var(--color-border)',
+          overflowY: 'auto',
+          padding: '8px 0',
+        }}>
+          {SECTIONS_NAV.map(s => (
+            <div
+              key={s.id}
+              onClick={() => setActiveNav(s.id)}
+              style={{
+                padding: '9px 14px',
+                fontSize: 12,
+                fontWeight: activeNav === s.id ? 700 : 500,
+                color: activeNav === s.id ? 'var(--color-teal)' : 'var(--color-text-muted)',
+                background: activeNav === s.id ? 'rgba(0, 212, 170, 0.08)' : 'transparent',
+                borderLeft: `3px solid ${activeNav === s.id ? 'var(--color-teal)' : 'transparent'}`,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {s.name}
+            </div>
+          ))}
+        </div>
+
+        {/* Center / Right Form Area (2 Columns) */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          overflowY: 'auto',
+          paddingRight: 6,
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14 }}>
+            {/* Left Column: 1. Patient Info, 2. Chief Complaint, 3. HPI */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* 1. Patient Information */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 14 }}>
+                  1. Patient Information
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: 11 }}>Patient Name</label>
+                    <input
+                      className="form-input"
+                      value={pInfo.name}
+                      onChange={e => handlePatientInfoChange('name', e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 11 }}>Age</label>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <input
+                          className="form-input"
+                          value={pInfo.age}
+                          onChange={e => handlePatientInfoChange('age', e.target.value)}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Years</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 11 }}>Gender</label>
+                      <select
+                        className="form-select"
+                        value={pInfo.gender}
+                        onChange={e => handlePatientInfoChange('gender', e.target.value)}
+                      >
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 11 }}>MRN</label>
                       <input
                         className="form-input"
-                        style={{ margin: 0, padding: '6px 8px' }}
-                        value={row[f]}
-                        onChange={e => updateRow(i, f, e.target.value)}
-                        placeholder={f}
+                        value={pInfo.mrn || '102345'}
+                        onChange={e => handlePatientInfoChange('mrn', e.target.value)}
                       />
-                    ) : (
-                      <span>{row[f] || '—'}</span>
-                    )}
-                  </td>
-                ))}
-                {editing && (
-                  <td>
-                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => removeRow(i)} style={{ color: 'var(--color-danger)' }}>✕</button>
-                  </td>
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 11 }}>Date of Birth</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={pInfo.dob || '1966-04-12'}
+                        onChange={e => handlePatientInfoChange('dob', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 11 }}>Blood Group</label>
+                      <select
+                        className="form-select"
+                        value={pInfo.bloodGroup || 'B+'}
+                        onChange={e => handlePatientInfoChange('bloodGroup', e.target.value)}
+                      >
+                        <option>A+</option>
+                        <option>A-</option>
+                        <option>B+</option>
+                        <option>B-</option>
+                        <option>AB+</option>
+                        <option>AB-</option>
+                        <option>O+</option>
+                        <option>O-</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontSize: 11 }}>Contact Number</label>
+                      <input
+                        className="form-input"
+                        value={pInfo.phone}
+                        onChange={e => handlePatientInfoChange('phone', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontSize: 11 }}>Address & Reaction</label>
+                    <input
+                      className="form-input"
+                      value={pInfo.address || 'No. 12, Gandhi Nagar, Madurai'}
+                      onChange={e => handlePatientInfoChange('address', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Chief Complaint */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 8 }}>
+                  2. Chief Complaint
+                </div>
+                <input
+                  className="form-input"
+                  value={caseSheet.chiefComplaint}
+                  onChange={e => handleFieldChange('chiefComplaint', e.target.value)}
+                />
+              </div>
+
+              {/* 3. History of Present Illness (HPI) */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 8 }}>
+                  3. History of Present Illness (HPI)
+                </div>
+                <textarea
+                  className="form-textarea"
+                  rows={4}
+                  value={caseSheet.hpi}
+                  onChange={e => handleFieldChange('hpi', e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Right Column: Medications, Allergies, Past Medical History, Family History */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Medications Card */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 12 }}>
+                  Medications
+                </div>
+
+                <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                  <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left', color: 'var(--color-text-muted)' }}>
+                        <th style={{ padding: '6px 4px' }}>Drug Name</th>
+                        <th style={{ padding: '6px 4px' }}>Dosage</th>
+                        <th style={{ padding: '6px 4px' }}>Frequency</th>
+                        <th style={{ padding: '6px 4px' }}>Route</th>
+                        <th style={{ padding: '6px 4px' }}>Duration</th>
+                        <th style={{ padding: '6px 4px', width: 24 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {caseSheet.medications?.map((m, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '8px 4px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{m.name}</td>
+                          <td style={{ padding: '8px 4px', color: 'var(--color-text-secondary)' }}>{m.dosage}</td>
+                          <td style={{ padding: '8px 4px', color: 'var(--color-text-secondary)' }}>{m.frequency}</td>
+                          <td style={{ padding: '8px 4px', color: 'var(--color-text-secondary)' }}>{m.route || 'Oral'}</td>
+                          <td style={{ padding: '8px 4px', color: 'var(--color-text-secondary)' }}>{m.duration}</td>
+                          <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleDeleteMedication(idx)}
+                              style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 12 }}
+                              title="Delete"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {newMedModal ? (
+                  <div style={{ padding: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <input className="form-input" placeholder="Drug Name" value={newMed.name} onChange={e => setNewMed({ ...newMed, name: e.target.value })} style={{ fontSize: 11 }} />
+                      <input className="form-input" placeholder="Dosage (e.g. 75mg)" value={newMed.dosage} onChange={e => setNewMed({ ...newMed, dosage: e.target.value })} style={{ fontSize: 11 }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                      <input className="form-input" placeholder="Freq (OD/BD)" value={newMed.frequency} onChange={e => setNewMed({ ...newMed, frequency: e.target.value })} style={{ fontSize: 11 }} />
+                      <input className="form-input" placeholder="Route (Oral)" value={newMed.route} onChange={e => setNewMed({ ...newMed, route: e.target.value })} style={{ fontSize: 11 }} />
+                      <input className="form-input" placeholder="Duration" value={newMed.duration} onChange={e => setNewMed({ ...newMed, duration: e.target.value })} style={{ fontSize: 11 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-sm btn-ghost" onClick={() => setNewMedModal(false)} style={{ fontSize: 11 }}>Cancel</button>
+                      <button className="btn btn-sm btn-primary" onClick={handleAddMedication} style={{ fontSize: 11 }}>Add</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setNewMedModal(true)}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#2563EB',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    + Add Medication
+                  </button>
                 )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </div>
+
+              {/* Allergies Card */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 10 }}>
+                  Allergies
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {caseSheet.allergies?.map((a, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(59, 130, 246, 0.12)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        color: '#60A5FA',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      {a}
+                      <span onClick={() => handleRemoveAllergy(i)} style={{ cursor: 'pointer', opacity: 0.7 }}>✕</span>
+                    </span>
+                  ))}
+
+                  {showAllergyInput ? (
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      <input
+                        className="form-input"
+                        placeholder="Allergy..."
+                        value={newAllergy}
+                        onChange={e => setNewAllergy(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddAllergy()}
+                        style={{ width: 110, padding: '2px 8px', fontSize: 11 }}
+                        autoFocus
+                      />
+                      <button className="btn btn-sm btn-primary" onClick={handleAddAllergy} style={{ padding: '2px 8px', fontSize: 11 }}>✓</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowAllergyInput(true)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Past Medical History Card */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 10 }}>
+                  Past Medical History
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {historyConditions.map((c, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(0, 212, 170, 0.08)',
+                        border: '1px solid rgba(0, 212, 170, 0.25)',
+                        color: 'var(--color-teal)',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {c}
+                    </span>
+                  ))}
+
+                  {showConditionInput ? (
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      <input
+                        className="form-input"
+                        placeholder="Condition..."
+                        value={newCondition}
+                        onChange={e => setNewCondition(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddCondition()}
+                        style={{ width: 120, padding: '2px 8px', fontSize: 11 }}
+                        autoFocus
+                      />
+                      <button className="btn btn-sm btn-primary" onClick={handleAddCondition} style={{ padding: '2px 8px', fontSize: 11 }}>✓</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowConditionInput(true)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Family History Card */}
+              <div className="card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 10 }}>
+                  Family History
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {familyHistoryList.map((f, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(168, 85, 247, 0.08)',
+                        border: '1px solid rgba(168, 85, 247, 0.25)',
+                        color: '#C084FC',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {f}
+                    </span>
+                  ))}
+
+                  {showFamilyInput ? (
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      <input
+                        className="form-input"
+                        placeholder="e.g. Father - Diabetes"
+                        value={newFamily}
+                        onChange={e => setNewFamily(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddFamily()}
+                        style={{ width: 140, padding: '2px 8px', fontSize: 11 }}
+                        autoFocus
+                      />
+                      <button className="btn btn-sm btn-primary" onClick={handleAddFamily} style={{ padding: '2px 8px', fontSize: 11 }}>✓</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowFamilyInput(true)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Bottom Bar Matching Screen 2 */}
+          <div style={{
+            position: 'sticky',
+            bottom: 0,
+            background: '#0F172A',
+            borderRadius: 8,
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '12px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
+            marginTop: 10,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#FBBF24', fontSize: 13, fontWeight: 600 }}>
+              <span>🤖</span>
+              <span>AI Generated • Pending Doctor Review</span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {saveToast && (
+                <span style={{ color: '#22C55E', fontSize: 12, fontWeight: 700 }}>
+                  ✓ Changes Saved Successfully!
+                </span>
+              )}
+              <button
+                onClick={handleSaveChanges}
+                style={{
+                  padding: '9px 22px',
+                  background: '#2563EB',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(37,99,235,0.4)',
+                }}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-      {editing && (
-        <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={addRow}>+ Add Medication</button>
-      )}
     </div>
   )
 }

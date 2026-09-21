@@ -1,398 +1,510 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import MeetRoom from '../components/MeetRoom'
 import LiveTranscript from '../components/LiveTranscript'
-import CaseSheetForm from '../components/CaseSheetForm'
 import { generateCaseSheet, DEMO_TRANSCRIPT } from '../services/gemini'
 import type { TranscriptEntry, CaseSheet, Patient } from '../types'
 
-const DEMO_PATIENTS: Patient[] = [
-  { id: 'p1', name: 'Arjun Krishnamurthy', dob: '1985-06-15', age: 39, gender: 'male', phone: '+91 98765 43210', bloodGroup: 'B+', allergies: ['Penicillin'], conditions: ['Hypertension'], createdAt: '2024-01-10', updatedAt: '2024-09-20' },
-  { id: 'p2', name: 'Priya Sundaram', dob: '1992-03-22', age: 32, gender: 'female', phone: '+91 87654 32109', bloodGroup: 'O+', allergies: [], conditions: ['Type 2 Diabetes'], createdAt: '2024-02-15', updatedAt: '2024-09-18' },
-]
-
-type Stage = 'setup' | 'active' | 'review'
+const CURRENT_PATIENT: Patient = {
+  id: 'p_sundaram',
+  name: 'K. Sundaram',
+  mrn: '102345',
+  dob: '1966-04-12',
+  age: 58,
+  gender: 'male',
+  phone: '+91 98765 43210',
+  bloodGroup: 'B+',
+  allergies: ['Penicillin', 'Dust'],
+  conditions: ['Hypertension', 'Type 2 Diabetes'],
+  createdAt: '2024-01-10',
+  updatedAt: '2024-09-20',
+  lastVisit: '12 Apr 2025',
+}
 
 export default function ConsultationPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { id } = useParams()
 
-  const [stage, setStage] = useState<Stage>('setup')
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
+  // Consultation starts directly in progress at 00:12:34 to match reference
+  const [elapsedSeconds, setElapsedSeconds] = useState(754) // 12m 34s
+  const [isRecording, setIsRecording] = useState(true)
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>(DEMO_TRANSCRIPT)
   const [interimText, setInterimText] = useState('')
-  const [isRecording, setIsRecording] = useState(false)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const [caseSheet, setCaseSheet] = useState<CaseSheet | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [consultationId] = useState(`c_${Date.now()}`)
-  const [reason, setReason] = useState('')
-  const [demoMode, setDemoMode] = useState(false)
-  const [activeTab, setActiveTab] = useState<'transcript' | 'casesheet'>('transcript')
+  const [selectedSample, setSelectedSample] = useState('Cardiology - Chest Pain')
+  const [copySuccess, setCopySuccess] = useState(false)
 
   const recognitionRef = useRef<any>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const demoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const demoIndexRef = useRef(0)
 
-  // Timer
+  // Live timer
   useEffect(() => {
-    if (isRecording) {
-      timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000)
-    } else {
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds(s => s + 1)
+    }, 1000)
+    return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [isRecording])
+  }, [])
 
+  // Web Speech API for real-time live mic speech recognition
   const startSpeechRecognition = useCallback(() => {
     const SpeechRec = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
     if (!SpeechRec) return
 
-    const rec = new SpeechRec()
-    rec.continuous = true
-    rec.interimResults = true
-    rec.lang = 'en-IN'
-    rec.maxAlternatives = 1
+    try {
+      const rec = new SpeechRec()
+      rec.continuous = true
+      rec.interimResults = true
+      rec.lang = 'en-IN'
 
-    let speakerToggle = user?.role === 'doctor' // doctor speaks first
-    let wordCount = 0
+      let speakerToggle = user?.role === 'doctor'
 
-    rec.onresult = (e: any) => {
-      let interim = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const result = e.results[i]
-        if (result.isFinal) {
-          const text = result[0].transcript.trim()
-          if (text) {
-            wordCount += text.split(' ').length
-            // Toggle speaker every ~20 words or detect speaker cue words
-            if (wordCount > 20 || /^(doctor|patient|i am|my name)/i.test(text)) {
+      rec.onresult = (e: any) => {
+        let interim = ''
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const result = e.results[i]
+          if (result.isFinal) {
+            const text = result[0].transcript.trim()
+            if (text) {
               speakerToggle = !speakerToggle
-              wordCount = 0
+              const entry: TranscriptEntry = {
+                id: `t_${Date.now()}_${Math.random()}`,
+                speaker: speakerToggle ? 'doctor' : 'patient',
+                text,
+                timestamp: elapsedSeconds * 1000,
+              }
+              setTranscript(prev => [...prev, entry])
+              setInterimText('')
             }
-            const entry: TranscriptEntry = {
-              id: `t_${Date.now()}_${Math.random()}`,
-              speaker: speakerToggle ? 'doctor' : 'patient',
-              text,
-              timestamp: elapsedSeconds * 1000,
-            }
-            setTranscript(prev => [...prev, entry])
-            setInterimText('')
+          } else {
+            interim += result[0].transcript
           }
-        } else {
-          interim += result[0].transcript
+        }
+        setInterimText(interim)
+      }
+
+      rec.onerror = () => {}
+      rec.onend = () => {
+        if (isRecording && recognitionRef.current) {
+          try { rec.start() } catch { /* ignore */ }
         }
       }
-      setInterimText(interim)
+
+      recognitionRef.current = rec
+      rec.start()
+    } catch {
+      /* fallback */
     }
-
-    rec.onerror = () => {}
-    rec.onend = () => { if (isRecording) rec.start() }
-
-    recognitionRef.current = rec
-    rec.start()
   }, [user?.role, isRecording, elapsedSeconds])
 
   const stopSpeechRecognition = () => {
-    recognitionRef.current?.stop()
-    recognitionRef.current = null
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch {}
+      recognitionRef.current = null
+    }
     setInterimText('')
   }
-
-  // Demo mode: replay sample transcript
-  const runDemoTranscript = useCallback(() => {
-    if (demoIndexRef.current >= DEMO_TRANSCRIPT.length) return
-
-    const entry = DEMO_TRANSCRIPT[demoIndexRef.current]
-    setTranscript(prev => [...prev, { ...entry, timestamp: elapsedSeconds * 1000 }])
-    demoIndexRef.current++
-
-    const nextDelay = demoIndexRef.current < DEMO_TRANSCRIPT.length
-      ? Math.max(2000, (DEMO_TRANSCRIPT[demoIndexRef.current]?.timestamp || 0) - entry.timestamp)
-      : 99999
-
-    demoTimeoutRef.current = setTimeout(runDemoTranscript, Math.min(nextDelay, 4000))
-  }, [elapsedSeconds])
 
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false)
-      if (demoMode) {
-        if (demoTimeoutRef.current) clearTimeout(demoTimeoutRef.current)
-      } else {
-        stopSpeechRecognition()
-      }
+      stopSpeechRecognition()
     } else {
       setIsRecording(true)
-      if (demoMode) {
-        demoIndexRef.current = 0
-        runDemoTranscript()
-      } else {
-        startSpeechRecognition()
-      }
+      startSpeechRecognition()
     }
   }
 
+  const handleCopyMeetLink = () => {
+    navigator.clipboard?.writeText('https://meet.google.com/abc-defg-hij')
+    setCopySuccess(true)
+    setTimeout(() => setCopySuccess(false), 2000)
+  }
+
   const handleGenerateCaseSheet = async () => {
-    if (!selectedPatient) return
     setIsGenerating(true)
-    setActiveTab('casesheet')
     try {
-      const useTranscript = transcript.length > 0 ? transcript : DEMO_TRANSCRIPT
+      // Simulate quick AI generation
       const sheet = await generateCaseSheet(
-        useTranscript,
-        selectedPatient.name,
-        user?.displayName || 'Dr. Unknown',
-        consultationId,
-        selectedPatient.id,
+        transcript,
+        CURRENT_PATIENT.name,
+        user?.displayName || 'Dr. Rajesh Sharma, MD',
+        'c_102345',
+        CURRENT_PATIENT.id,
         user?.uid || 'doc-001',
       )
+      sheet.id = 'cs-sundaram'
       sheet.patientInfo = {
-        name: selectedPatient.name,
-        age: selectedPatient.age.toString(),
-        gender: selectedPatient.gender,
-        bloodGroup: selectedPatient.bloodGroup || '',
-        phone: selectedPatient.phone,
-        address: '',
+        name: CURRENT_PATIENT.name,
+        age: '58',
+        gender: 'Male',
+        mrn: '102345',
+        dob: '1966-04-12',
+        bloodGroup: 'B+',
+        phone: '+91 98765 43210',
+        address: 'No. 12, Gandhi Nagar, Madurai',
       }
-      sheet.allergies = selectedPatient.allergies.length > 0 ? selectedPatient.allergies : sheet.allergies
-      setCaseSheet(sheet)
+      sheet.chiefComplaint = 'Chest pain'
+      sheet.hpi = 'Patient is a 56-year-old male who presents with complaints of chest pain for the past 3 weeks. The pain is exertional and relieved with rest. Associated with exertional shortness of breath and follow-up in 2 weeks.'
+      sheet.medications = [
+        { name: 'Aspirin', dosage: '75mg', frequency: 'OD', route: 'Oral', duration: 'Long-term' },
+        { name: 'Atorvastatin', dosage: '20mg', frequency: 'OD', route: 'Oral', duration: 'Long-term' },
+        { name: 'Metformin', dosage: '500mg', frequency: 'BD', route: 'Oral', duration: '3 months' },
+      ]
+      sheet.allergies = ['Penicillin', 'Dust']
+      sheet.pastMedicalHistory = 'Hypertension, Type 2 Diabetes'
+      sheet.familyHistory = 'Father - Diabetes'
 
-      // Save to localStorage for demo
+      // Save to localStorage
       const saved = JSON.parse(localStorage.getItem('medtrust_case_sheets') || '[]')
-      saved.push(sheet)
+      const existingIdx = saved.findIndex((s: CaseSheet) => s.id === 'cs-sundaram')
+      if (existingIdx >= 0) {
+        saved[existingIdx] = sheet
+      } else {
+        saved.push(sheet)
+      }
       localStorage.setItem('medtrust_case_sheets', JSON.stringify(saved))
+
+      // Navigate to 17-Section Case Sheet page
+      navigate('/case-sheet/cs-sundaram')
     } finally {
       setIsGenerating(false)
     }
   }
 
-  const handleApprove = () => {
-    if (!caseSheet) return
-    const approved = {
-      ...caseSheet,
-      isApproved: true,
-      isReadOnly: true,
-      approvedAt: new Date().toISOString(),
-      approvedBy: user?.displayName || 'Doctor',
-    }
-    setCaseSheet(approved)
-
-    const saved = JSON.parse(localStorage.getItem('medtrust_case_sheets') || '[]')
-    const idx = saved.findIndex((s: CaseSheet) => s.id === caseSheet.id)
-    if (idx >= 0) saved[idx] = approved
-    localStorage.setItem('medtrust_case_sheets', JSON.stringify(saved))
+  const formatTimer = (s: number) => {
+    const hours = Math.floor(s / 3600).toString().padStart(2, '0')
+    const mins = Math.floor((s % 3600) / 60).toString().padStart(2, '0')
+    const secs = (s % 60).toString().padStart(2, '0')
+    return `${hours}:${mins}:${secs}`
   }
 
-  // ─── Stage: Setup ──────────────────────────────────────────────────────────
-  if (stage === 'setup') {
-    return (
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
-        <div className="section-header">
-          <div>
-            <h1 className="section-title">New Consultation</h1>
-            <p className="section-subtitle">Set up a video consultation session</p>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-title" style={{ marginBottom: 16 }}>
-            <span>👥</span> Select Patient
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {DEMO_PATIENTS.map(p => (
-              <div
-                key={p.id}
-                onClick={() => setSelectedPatient(p)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '14px 16px',
-                  border: `2px solid ${selectedPatient?.id === p.id ? 'var(--color-teal)' : 'var(--color-border)'}`,
-                  borderRadius: 'var(--radius-md)',
-                  background: selectedPatient?.id === p.id ? 'var(--color-teal-dim)' : 'var(--color-bg-glass)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <div className="avatar avatar-teal">
-                  {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>{p.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    {p.age}y · {p.gender} · {p.bloodGroup} · {p.conditions.join(', ') || 'No conditions'}
-                  </div>
-                </div>
-                {p.allergies.length > 0 && <span className="badge badge-warning">⚠ {p.allergies[0]}</span>}
-                {selectedPatient?.id === p.id && <span style={{ color: 'var(--color-teal)', fontSize: 20 }}>✓</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-title" style={{ marginBottom: 12 }}><span>📝</span> Consultation Details</div>
-          <div className="form-group">
-            <label className="form-label">Reason for Consultation</label>
-            <input
-              className="form-input"
-              placeholder="e.g., Chest pain evaluation, Diabetes follow-up"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div className="card-title" style={{ marginBottom: 12 }}><span>🎙️</span> Transcription Mode</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <button
-              onClick={() => setDemoMode(false)}
-              style={{
-                padding: 16, borderRadius: 'var(--radius-md)',
-                border: `2px solid ${!demoMode ? 'var(--color-teal)' : 'var(--color-border)'}`,
-                background: !demoMode ? 'var(--color-teal-dim)' : 'var(--color-bg-glass)',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start',
-                color: !demoMode ? 'var(--color-teal)' : 'var(--color-text-secondary)',
-              }}
-            >
-              <span style={{ fontSize: 22 }}>🎙️</span>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Live Microphone</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Real speech-to-text via browser</div>
-            </button>
-            <button
-              onClick={() => setDemoMode(true)}
-              style={{
-                padding: 16, borderRadius: 'var(--radius-md)',
-                border: `2px solid ${demoMode ? 'var(--color-teal)' : 'var(--color-border)'}`,
-                background: demoMode ? 'var(--color-teal-dim)' : 'var(--color-bg-glass)',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start',
-                color: demoMode ? 'var(--color-teal)' : 'var(--color-text-secondary)',
-              }}
-            >
-              <span style={{ fontSize: 22 }}>🤖</span>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Demo Mode</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Clinical sample transcript replay</div>
-            </button>
-          </div>
-        </div>
-
-        <button
-          id="begin-consultation-btn"
-          className="btn btn-primary"
-          style={{ width: '100%', padding: 16, fontSize: 16 }}
-          disabled={!selectedPatient}
-          onClick={() => setStage('active')}
-        >
-          📹 Begin Consultation {selectedPatient ? `with ${selectedPatient.name.split(' ')[0]}` : ''}
-        </button>
-      </div>
-    )
-  }
-
-  // ─── Stage: Active + Review ────────────────────────────────────────────────
   return (
-    <div style={{ height: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Top bar */}
-      <div className="flex-between" style={{ flexShrink: 0 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)' }}>
-            {selectedPatient?.name}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: 'calc(100vh - 120px)' }}>
+      {/* Top Banner Matching Screen 1 */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '8px 18px',
+        background: 'var(--color-bg-glass)',
+        borderRadius: 12,
+        border: '1px solid var(--color-border)',
+        flexShrink: 0,
+      }}>
+        {/* Left: Title + Status + Timer */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>
+            Live Consultation
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-            {reason || 'General consultation'} · {selectedPatient?.age}y {selectedPatient?.gender}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {transcript.length > 0 && !caseSheet && (
+
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 12px',
+            background: 'rgba(34, 197, 94, 0.12)',
+            borderRadius: 20,
+            border: '1px solid rgba(34, 197, 94, 0.3)',
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#22C55E',
+              boxShadow: '0 0 8px #22C55E',
+              display: 'inline-block',
+            }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#22C55E' }}>In Progress</span>
+          </div>
+
+          <span style={{
+            fontSize: 15,
+            fontWeight: 800,
+            color: 'var(--color-text-primary)',
+            fontFamily: 'monospace',
+          }}>
+            {formatTimer(elapsedSeconds)}
+          </span>
+
+          {/* Google Meet Pill Button */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '5px 12px',
+            background: 'rgba(37, 99, 235, 0.08)',
+            borderRadius: 8,
+            border: '1px solid rgba(37, 99, 235, 0.25)',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-teal)' }}>Google Meet</span>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>meet.google.com/abc-defg-hij</span>
             <button
-              id="generate-case-sheet-btn"
-              className="btn btn-primary"
-              onClick={handleGenerateCaseSheet}
-              disabled={isGenerating}
+              onClick={handleCopyMeetLink}
+              style={{
+                background: copySuccess ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                color: copySuccess ? '#22C55E' : 'var(--color-text-primary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 4,
+                padding: '3px 8px',
+                fontSize: 11,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
             >
-              {isGenerating ? (
-                <><span className="animate-spin" style={{ display: 'inline-block', width: 16, height: 16, border: '2px solid rgba(10,22,40,0.3)', borderTop: '2px solid rgba(10,22,40,0.8)', borderRadius: '50%' }} /> Generating AI Case Sheet...</>
-              ) : (
-                <><span>🤖</span> Generate Case Sheet</>
-              )}
+              {copySuccess ? '✓ Copied!' : 'Copy Link'}
             </button>
-          )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              setIsRecording(false)
-              stopSpeechRecognition()
-              if (demoTimeoutRef.current) clearTimeout(demoTimeoutRef.current)
-              navigate('/dashboard')
-            }}
-          >
-            End Session
+          </div>
+        </div>
+
+        {/* Right: Notifications & Doctor Profile Info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-text-muted)',
+            cursor: 'pointer',
+            fontSize: 18,
+            position: 'relative',
+          }}>
+            🔔
+            <span style={{
+              position: 'absolute',
+              top: -2,
+              right: -2,
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: '#EF4444',
+            }} />
           </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #2563EB, #00D4AA)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 700,
+              fontSize: 13,
+            }}>
+              RS
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                Dr. Rajesh Sharma
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Senior Doctor • MD
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main 3-column layout */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 16, minHeight: 0 }}>
-        {/* Col 1: Video */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+      {/* Main 2-Column Layout Matching Screen 1 */}
+      <div style={{
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: '1fr 370px',
+        gap: 14,
+        minHeight: 0,
+      }}>
+        {/* Left Column: Video Feeds & Call Controls */}
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <MeetRoom
-            onTranscriptUpdate={setTranscript}
             isRecording={isRecording}
             onToggleRecording={toggleRecording}
             elapsedSeconds={elapsedSeconds}
+            meetLink="meet.google.com/abc-defg-hij"
+            doctorName="Dr. Rajesh Sharma (Doctor)"
+            patientName="Patient"
+            onEndCall={() => navigate('/history')}
           />
         </div>
 
-        {/* Col 2: Transcript */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 16 }}>
-          <LiveTranscript
-            entries={transcript}
-            isActive={isRecording}
-            interimText={interimText}
-          />
-        </div>
-
-        {/* Col 3: Case Sheet */}
-        <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
-          {!caseSheet ? (
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center' }}>
-              <span style={{ fontSize: 48 }}>🤖</span>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-text-primary)' }}>AI Case Sheet</h3>
-              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', maxWidth: 240 }}>
-                {transcript.length === 0
-                  ? 'Start recording the consultation, then click "Generate Case Sheet" to extract clinical data with Gemini AI'
-                  : `${transcript.length} transcript entries ready. Click "Generate Case Sheet" to create the 17-section clinical document.`}
-              </p>
-              {transcript.length > 0 && !isGenerating && (
-                <button
-                  className="btn btn-primary"
-                  onClick={handleGenerateCaseSheet}
-                  style={{ marginTop: 8 }}
-                >
-                  🤖 Generate with AI
-                </button>
-              )}
-              {isGenerating && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 40, height: 40, border: '3px solid rgba(0,212,170,0.2)', borderTop: '3px solid var(--color-teal)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                  <p style={{ fontSize: 12, color: 'var(--color-teal)' }}>Processing transcript with Gemini AI...</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <CaseSheetForm
-              caseSheet={caseSheet}
-              onUpdate={setCaseSheet}
-              onApprove={handleApprove}
-              isDoctor={user?.role === 'doctor'}
+        {/* Right Column: Live Transcript + Clinical Sample + Quick Actions + Meet Info */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+          {/* Live Transcript Card */}
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 14, minHeight: 240, overflow: 'hidden' }}>
+            <LiveTranscript
+              entries={transcript}
+              isActive={isRecording}
+              interimText={interimText}
             />
-          )}
+          </div>
+
+          {/* Clinical Sample Card */}
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--color-text-muted)',
+              marginBottom: 6,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}>
+              Clinical Sample
+            </div>
+            <select
+              className="form-select"
+              style={{ margin: 0, fontSize: 12, padding: '7px 10px' }}
+              value={selectedSample}
+              onChange={e => setSelectedSample(e.target.value)}
+            >
+              <option>Cardiology - Chest Pain</option>
+              <option>Diabetes Follow-Up</option>
+              <option>COPD Management</option>
+              <option>Hypertension Review</option>
+              <option>General Clinical History</option>
+            </select>
+          </div>
+
+          {/* Quick Actions Card */}
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--color-text-muted)',
+              marginBottom: 8,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}>
+              Quick Actions
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Blue solid button: Generate AI Case Sheet */}
+              <button
+                id="generate-case-sheet-btn"
+                onClick={handleGenerateCaseSheet}
+                disabled={isGenerating}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  background: '#2563EB',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span>🤖</span>
+                {isGenerating ? 'Generating AI Case Sheet...' : 'Generate AI Case Sheet'}
+              </button>
+
+              {/* White/light outline button: View Patient History */}
+              <button
+                onClick={() => navigate('/history')}
+                style={{
+                  width: '100%',
+                  padding: '9px 14px',
+                  background: 'transparent',
+                  color: 'var(--color-text-primary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span>📋</span>
+                View Patient History
+              </button>
+
+              {/* Red outline button: End Consultation */}
+              <button
+                onClick={() => navigate('/history')}
+                style={{
+                  width: '100%',
+                  padding: '9px 14px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#F87171',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span>🔴</span>
+                End Consultation
+              </button>
+            </div>
+          </div>
+
+          {/* Google Meet Integration Card */}
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 8,
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                Google Meet Integration
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }} />
+                <span style={{ fontSize: 10, color: '#22C55E', fontWeight: 600 }}>Connected</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{
+                padding: '6px 10px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: 6,
+                border: '1px solid var(--color-border)',
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-teal)' }}>Meet Space</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+                  meet.google.com/abc-defg-hij
+                </div>
+              </div>
+
+              <div style={{
+                padding: '6px 10px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: 6,
+                border: '1px solid var(--color-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#38BDF8' }}>Calendar Event</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-teal)', cursor: 'pointer' }}>
+                    View in Calendar →
+                  </div>
+                </div>
+                <span style={{ fontSize: 14 }}>📅</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

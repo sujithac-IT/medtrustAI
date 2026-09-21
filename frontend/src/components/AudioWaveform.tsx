@@ -41,9 +41,21 @@ export default function AudioWaveform({ isActive, color = '#00D4AA', barCount = 
 
         const gradient = ctx.createLinearGradient(0, y, 0, y + barH)
         if (isActive) {
-          gradient.addColorStop(0, color + 'ff')
-          gradient.addColorStop(0.5, color + 'cc')
-          gradient.addColorStop(1, color + '44')
+          // Multi-color neon spectrum across the visualizer width
+          const hueRatio = i / barCount
+          if (hueRatio < 0.33) {
+            gradient.addColorStop(0, '#00E5FF') // Neon Cyan
+            gradient.addColorStop(0.6, '#00D4AA') // Teal
+            gradient.addColorStop(1, '#059669') // Emerald
+          } else if (hueRatio < 0.66) {
+            gradient.addColorStop(0, '#A855F7') // Bright Purple
+            gradient.addColorStop(0.5, '#6366F1') // Indigo
+            gradient.addColorStop(1, '#3B82F6') // Blue
+          } else {
+            gradient.addColorStop(0, '#EC4899') // Pink
+            gradient.addColorStop(0.5, '#8B5CF6') // Violet
+            gradient.addColorStop(1, '#00D4AA') // Cyan
+          }
         } else {
           gradient.addColorStop(0, '#334155')
           gradient.addColorStop(1, '#1e293b')
@@ -51,7 +63,7 @@ export default function AudioWaveform({ isActive, color = '#00D4AA', barCount = 
 
         ctx.fillStyle = gradient
         ctx.beginPath()
-        ctx.roundRect(x, y, barWidth, Math.max(barH, 2), barWidth / 2)
+        ctx.roundRect(x, y, barWidth, Math.max(barH, 3), barWidth / 2)
         ctx.fill()
       })
 

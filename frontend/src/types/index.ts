@@ -1,6 +1,6 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type UserRole = 'doctor' | 'patient'
+export type UserRole = 'doctor' | 'patient' | 'student'
 
 export interface User {
   uid: string
@@ -28,11 +28,13 @@ export interface Patient {
   emergencyContact?: string
   createdAt: string
   updatedAt: string
+  mrn?: string
+  lastVisit?: string
 }
 
 export interface TranscriptEntry {
   id: string
-  speaker: 'doctor' | 'patient' | 'unknown'
+  speaker: 'doctor' | 'patient' | 'student' | 'unknown'
   text: string
   timestamp: number
   language?: string
@@ -42,6 +44,7 @@ export interface MedicationRow {
   name: string
   dosage: string
   frequency: string
+  route?: string
   duration: string
 }
 
@@ -52,6 +55,7 @@ export interface CaseSheet {
   patientName: string
   doctorId: string
   doctorName: string
+  department?: string
   generatedAt: string
   approvedAt?: string
   approvedBy?: string
@@ -66,6 +70,8 @@ export interface CaseSheet {
     bloodGroup: string
     phone: string
     address: string
+    mrn?: string
+    dob?: string
   }
   chiefComplaint: string
   hpi: string

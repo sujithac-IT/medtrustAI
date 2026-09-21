@@ -24,17 +24,24 @@ const DEMO_USERS: Record<UserRole, User> = {
   doctor: {
     uid: 'demo-doctor-001',
     email: 'dr.rajesh@medtrust.ai',
-    displayName: 'Dr. Rajesh Kumar',
+    displayName: 'Dr. Rajesh Sharma, MD',
     role: 'doctor',
-    specialization: 'Internal Medicine',
-    licenseNumber: 'TN-MCI-12345',
-    department: 'General Medicine',
+    specialization: 'Senior Doctor • Cardiology',
+    licenseNumber: 'TN-MCI-102345',
+    department: 'Cardiology',
   },
   patient: {
     uid: 'demo-patient-001',
     email: 'patient@medtrust.ai',
-    displayName: 'Arjun Krishnamurthy',
+    displayName: 'K. Sundaram',
     role: 'patient',
+  },
+  student: {
+    uid: 'demo-student-001',
+    email: 'student@medtrust.ai',
+    displayName: 'Aakash V (MBBS Student)',
+    role: 'student',
+    department: 'Cardiology Clinical Observership',
   },
 }
 
@@ -46,41 +53,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check localStorage for demo user
     const savedUser = localStorage.getItem('medtrust_demo_user')
     if (savedUser) {
-      setUser(JSON.parse(savedUser))
-      setLoading(false)
-      return
+      try {
+        const parsed = JSON.parse(savedUser)
+        if (parsed.role === 'doctor') {
+          parsed.displayName = 'Dr. Rajesh Sharma, MD'
+          localStorage.setItem('medtrust_demo_user', JSON.stringify(parsed))
+        }
+        setUser(parsed)
+        setLoading(false)
+        return
+      } catch {}
     }
 
-    if (DEMO_MODE || !auth) {
-      setLoading(false)
-      return
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Fetch role from Firestore
-        try {
-          const userDoc = await getDoc(doc(db!, 'users', firebaseUser.uid))
-          const userData = userDoc.data()
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || userData?.displayName || '',
-            role: userData?.role || 'patient',
-            specialization: userData?.specialization,
-            licenseNumber: userData?.licenseNumber,
-            department: userData?.department,
-          })
-        } catch {
+    if (auth && !DEMO_MODE) {
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          try {
+            const userDoc = await getDoc(doc(db!, 'users', firebaseUser.uid))
+            const userData = userDoc.data()
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || userData?.displayName || '',
+              role: userData?.role || 'patient',
+              specialization: userData?.specialization,
+              licenseNumber: userData?.licenseNumber,
+              department: userData?.department,
+            })
+          } catch {
+            setUser(null)
+          }
+        } else {
           setUser(null)
         }
-      } else {
-        setUser(null)
-      }
-      setLoading(false)
-    })
+        setLoading(false)
+      })
 
-    return unsubscribe
+      return unsubscribe
+    }
+
+    // Default to Dr. Rajesh Sharma for seamless demo
+    setUser(DEMO_USERS.doctor)
+    localStorage.setItem('medtrust_demo_user', JSON.stringify(DEMO_USERS.doctor))
+    setLoading(false)
   }, [])
 
   const demoLogin = (role: UserRole) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type { TranscriptEntry } from '../types'
 
 interface LiveTranscriptProps {
@@ -9,15 +9,43 @@ interface LiveTranscriptProps {
 
 export default function LiveTranscript({ entries, isActive, interimText }: LiveTranscriptProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [entries, interimText])
+    if (autoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [entries, interimText, autoScroll])
 
   const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000)
-    const m = Math.floor(s / 60)
-    return `${m.toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
+    const totalSec = Math.floor(ms / 1000)
+    const m = Math.floor(totalSec / 60)
+    const s = totalSec % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  const getSpeakerBadge = (speaker: string) => {
+    switch (speaker) {
+      case 'doctor':
+        return {
+          label: 'Doctor',
+          bg: '#2563EB',
+          text: '#FFFFFF',
+        }
+      case 'student':
+        return {
+          label: 'Student',
+          bg: '#7C3AED',
+          text: '#FFFFFF',
+        }
+      case 'patient':
+      default:
+        return {
+          label: 'Patient',
+          bg: '#059669',
+          text: '#FFFFFF',
+        }
+    }
   }
 
   return (
@@ -31,28 +59,44 @@ export default function LiveTranscript({ entries, isActive, interimText }: LiveT
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 12,
+        paddingBottom: 10,
+        marginBottom: 10,
+        borderBottom: '1px solid var(--color-border)',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>🎙️</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>Live Transcript</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>Live Transcript</span>
+          {isActive && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 11, padding: '2px 8px', borderRadius: 12,
+              background: 'rgba(34,197,94,0.15)', color: '#22C55E', fontWeight: 600,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }} />
+              Live
+            </span>
+          )}
         </div>
-        {isActive && (
-          <div className="live-indicator">
-            <span className="live-dot" />
-            Transcribing
-          </div>
-        )}
+
+        {/* Auto-scroll toggle */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={autoScroll}
+            onChange={e => setAutoScroll(e.target.checked)}
+            style={{ accentColor: 'var(--color-teal)', cursor: 'pointer' }}
+          />
+          <span>Auto-scroll</span>
+        </label>
       </div>
 
-      {/* Transcript area */}
+      {/* Transcript entries */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
+        gap: 12,
         paddingRight: 4,
       }}>
         {entries.length === 0 && !interimText && (
@@ -62,91 +106,73 @@ export default function LiveTranscript({ entries, isActive, interimText }: LiveT
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 12,
+            gap: 10,
             color: 'var(--color-text-muted)',
             textAlign: 'center',
+            padding: 20,
           }}>
-            <span style={{ fontSize: 40 }}>🎙️</span>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
-                {isActive ? 'Listening...' : 'Start recording to begin transcription'}
-              </p>
-              <p style={{ fontSize: 12 }}>Speak naturally — AI will separate Doctor and Patient voices</p>
-            </div>
+            <span style={{ fontSize: 36 }}>🎙️</span>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+              Transcript will appear as conversation happens
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              Supports Doctor, Student, and Patient speech recognition
+            </p>
           </div>
         )}
 
-        {entries.map((entry, i) => (
-          <div
-            key={entry.id}
-            style={{
-              display: 'flex',
-              flexDirection: entry.speaker === 'doctor' ? 'row' : 'row-reverse',
-              gap: 8,
-              animation: 'slideUp 0.2s ease',
-            }}
-          >
-            {/* Avatar */}
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: entry.speaker === 'doctor' ? 'var(--color-teal-dim)' : 'var(--color-blue-dim)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              flexShrink: 0,
-              border: `1px solid ${entry.speaker === 'doctor' ? 'rgba(0,212,170,0.2)' : 'rgba(59,130,246,0.2)'}`,
-            }}>
-              {entry.speaker === 'doctor' ? '👨‍⚕️' : '🤒'}
-            </div>
-
-            {/* Bubble */}
-            <div style={{
-              maxWidth: '78%',
-              padding: '8px 12px',
-              borderRadius: entry.speaker === 'doctor' ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
-              background: entry.speaker === 'doctor'
-                ? 'rgba(0, 212, 170, 0.08)'
-                : 'rgba(59, 130, 246, 0.08)',
-              border: `1px solid ${entry.speaker === 'doctor' ? 'rgba(0,212,170,0.15)' : 'rgba(59,130,246,0.15)'}`,
-            }}>
-              <div style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: entry.speaker === 'doctor' ? 'var(--color-teal)' : 'var(--color-blue-accent)',
-                marginBottom: 3,
-                letterSpacing: '0.5px',
-                textTransform: 'uppercase',
-              }}>
-                {entry.speaker === 'doctor' ? 'Doctor' : 'Patient'} · {formatTime(entry.timestamp)}
+        {entries.map((entry) => {
+          const badge = getSpeakerBadge(entry.speaker)
+          return (
+            <div
+              key={entry.id}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                padding: '8px 10px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.05)',
+                animation: 'fadeIn 0.2s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  background: badge.bg,
+                  color: badge.text,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                }}>
+                  {badge.label}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+                  {formatTime(entry.timestamp)}
+                </span>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.45, paddingLeft: 2 }}>
                 {entry.text}
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
-        {/* Interim (currently speaking) */}
+        {/* Interim Text */}
         {interimText && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: 8, opacity: 0.7 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0, border: '1px solid rgba(0,212,170,0.2)' }}>
-              👨‍⚕️
+          <div style={{
+            padding: '8px 10px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'rgba(0,212,170,0.04)',
+            border: '1px dashed rgba(0,212,170,0.3)',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-teal)', marginBottom: 2 }}>
+              Listening...
             </div>
-            <div style={{
-              maxWidth: '78%',
-              padding: '8px 12px',
-              borderRadius: '4px 12px 12px 12px',
-              background: 'rgba(0, 212, 170, 0.05)',
-              border: '1px dashed rgba(0,212,170,0.3)',
-            }}>
-              <div style={{ fontSize: 10, color: 'var(--color-teal)', fontWeight: 700, marginBottom: 3, letterSpacing: '0.5px' }}>Listening...</div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, fontStyle: 'italic' }}>
-                {interimText}
-                <span style={{ display: 'inline-block', width: 8, height: 14, background: 'var(--color-teal)', marginLeft: 4, animation: 'pulse-red 0.8s ease-in-out infinite', borderRadius: 2 }} />
-              </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+              {interimText}
             </div>
           </div>
         )}

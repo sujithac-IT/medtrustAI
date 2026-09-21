@@ -11,84 +11,65 @@ if (GEMINI_KEY && GEMINI_KEY !== 'your_gemini_api_key') {
 
 // ─── Sample Clinical Transcript ────────────────────────────────────────────────
 export const DEMO_TRANSCRIPT: TranscriptEntry[] = [
-  { id: '1', speaker: 'doctor', text: 'Good morning! I\'m Dr. Rajesh. How are you feeling today?', timestamp: 0 },
-  { id: '2', speaker: 'patient', text: 'Good morning doctor. I\'ve been having severe chest pain for the past 3 days. It gets worse when I breathe deeply.', timestamp: 5000 },
-  { id: '3', speaker: 'doctor', text: 'I see. Is the pain sharp or dull? Does it radiate to your arm or jaw?', timestamp: 12000 },
-  { id: '4', speaker: 'patient', text: 'It\'s more of a sharp pain, doctor. It stays in the center of my chest. Sometimes my left shoulder also hurts.', timestamp: 18000 },
-  { id: '5', speaker: 'doctor', text: 'Any shortness of breath? Sweating? Nausea?', timestamp: 28000 },
-  { id: '6', speaker: 'patient', text: 'Yes, I feel breathless when walking upstairs. I had slight sweating last night too. No nausea though.', timestamp: 33000 },
-  { id: '7', speaker: 'doctor', text: 'Do you have any history of heart disease, hypertension, or diabetes? Any family history?', timestamp: 44000 },
-  { id: '8', speaker: 'patient', text: 'I was diagnosed with hypertension 2 years ago. I\'m on Amlodipine 5mg. My father had a heart attack at 58.', timestamp: 50000 },
-  { id: '9', speaker: 'doctor', text: 'Are you allergic to any medications? Specifically aspirin, penicillin, or any contrast dye?', timestamp: 62000 },
-  { id: '10', speaker: 'patient', text: 'I\'m allergic to penicillin — I got a rash the last time I took it. No other known allergies.', timestamp: 68000 },
-  { id: '11', speaker: 'doctor', text: 'Do you smoke or drink alcohol? What\'s your occupation?', timestamp: 78000 },
-  { id: '12', speaker: 'patient', text: 'I quit smoking 5 years ago. Occasional alcohol on weekends. I work as a software engineer — quite sedentary.', timestamp: 84000 },
-  { id: '13', speaker: 'doctor', text: 'On examination, your BP is 148/94, pulse 88 regular. Heart sounds normal. Let me listen to your lungs. Mild bibasal crepitations present.', timestamp: 96000 },
-  { id: '14', speaker: 'patient', text: 'Is that serious, doctor?', timestamp: 108000 },
-  { id: '15', speaker: 'doctor', text: 'We need to rule out cardiac causes. I\'m ordering an ECG, chest X-ray, 2D Echo, troponin levels, and CBC. Based on your risk profile, we\'ll start aspirin 75mg and continue your Amlodipine. I\'m also adding Atorvastatin 20mg.', timestamp: 112000 },
-  { id: '16', speaker: 'patient', text: 'Should I be admitted? I\'m a bit worried.', timestamp: 130000 },
-  { id: '17', speaker: 'doctor', text: 'We\'ll monitor you for 24 hours. Please avoid strenuous activity. Follow up in 3 days with all reports. Avoid penicillin-based antibiotics if needed.', timestamp: 136000 },
+  { id: '1', speaker: 'doctor', text: 'Good morning, how are you feeling today?', timestamp: 1000 },
+  { id: '2', speaker: 'patient', text: 'I have been having chest pain for the last 3 weeks...', timestamp: 4000 },
+  { id: '3', speaker: 'doctor', text: 'Any shortness of breath or dizziness?', timestamp: 8000 },
+  { id: '4', speaker: 'patient', text: 'Sometimes I feel breathless while walking...', timestamp: 12000 },
+  { id: '5', speaker: 'doctor', text: 'Noted, Mr. Sundaram.', timestamp: 18000 },
+  { id: '6', speaker: 'student', text: 'I will note down your vitals and medical history.', timestamp: 22000 },
+  { id: '7', speaker: 'patient', text: 'The chest pain is mostly exertional and relieved with rest. I also have high blood pressure and type 2 diabetes.', timestamp: 30000 },
+  { id: '8', speaker: 'student', text: 'Which medications are you currently taking for blood pressure and diabetes?', timestamp: 40000 },
+  { id: '9', speaker: 'patient', text: 'I take Aspirin 75mg once daily, Atorvastatin 20mg once daily, and Metformin 500mg twice daily.', timestamp: 48000 },
+  { id: '10', speaker: 'doctor', text: 'Any drug or environmental allergies we should document?', timestamp: 58000 },
+  { id: '11', speaker: 'patient', text: 'I have an allergy to Penicillin which gives me skin rashes, and dust causes allergic sneezing.', timestamp: 66000 },
+  { id: '12', speaker: 'student', text: 'Does anyone in your family have diabetes or heart disease?', timestamp: 74000 },
+  { id: '13', speaker: 'patient', text: 'Yes, my father had diabetes.', timestamp: 80000 },
+  { id: '14', speaker: 'doctor', text: 'Physical examination shows BP 148/94 mmHg, pulse 88 bpm. We will order a 12-lead ECG, cardiac troponin and echocardiogram. Follow-up in 2 weeks.', timestamp: 92000 },
 ]
 
 // ─── Local NLP Fallback (no API key needed) ────────────────────────────────────
 function extractLocalCaseSheet(transcript: TranscriptEntry[]): Partial<CaseSheet> {
   const fullText = transcript.map(t => `${t.speaker.toUpperCase()}: ${t.text}`).join('\n')
-  const patientTexts = transcript.filter(t => t.speaker === 'patient').map(t => t.text).join(' ')
-  const doctorTexts = transcript.filter(t => t.speaker === 'doctor').map(t => t.text).join(' ')
-
-  // Extract key info with regex patterns
-  const allergyMatch = patientTexts.match(/allerg(?:ic|y) to ([^.]+)/i)
-  const bpMatch = doctorTexts.match(/BP (?:is )?(\d+\/\d+)/i)
-  const pulseMatch = doctorTexts.match(/pulse (\d+)/i)
-
-  const medications: MedicationRow[] = []
-  const medPatterns = [
-    { regex: /Amlodipine\s+(\d+mg)/i, name: 'Amlodipine' },
-    { regex: /Aspirin\s+(\d+mg)/i, name: 'Aspirin' },
-    { regex: /Atorvastatin\s+(\d+mg)/i, name: 'Atorvastatin' },
-  ]
-  medPatterns.forEach(({ regex, name }) => {
-    const m = fullText.match(regex)
-    if (m) medications.push({ name, dosage: m[1], frequency: 'Once daily', duration: 'Ongoing' })
-  })
-
-  const symptoms: string[] = []
-  if (/chest pain/i.test(patientTexts)) symptoms.push('Chest pain (sharp, central)')
-  if (/breath/i.test(patientTexts)) symptoms.push('Shortness of breath')
-  if (/sweat/i.test(patientTexts)) symptoms.push('Diaphoresis')
-  if (/shoulder/i.test(patientTexts)) symptoms.push('Left shoulder pain')
-
-  const investigations: string[] = []
-  if (/ECG/i.test(doctorTexts)) investigations.push('ECG (12-lead)')
-  if (/X-ray/i.test(doctorTexts)) investigations.push('Chest X-Ray (PA view)')
-  if (/Echo/i.test(doctorTexts)) investigations.push('2D Echocardiogram')
-  if (/troponin/i.test(doctorTexts)) investigations.push('Troponin I/T levels')
-  if (/CBC/i.test(doctorTexts)) investigations.push('Complete Blood Count (CBC)')
 
   return {
-    chiefComplaint: 'Chest pain with associated breathlessness for 3 days',
-    hpi: 'Patient presents with a 3-day history of central chest pain, sharp in nature, worsening on deep inspiration. Associated with left shoulder radiation, dyspnea on exertion, and nocturnal diaphoresis. Denies nausea or vomiting.',
-    symptoms,
-    duration: '3 days',
-    pastMedicalHistory: 'Hypertension (diagnosed 2 years ago). No prior cardiac events documented.',
-    medications: medications.length > 0 ? medications : [
-      { name: 'Amlodipine', dosage: '5mg', frequency: 'Once daily', duration: 'Ongoing' },
+    patientInfo: {
+      name: 'K. Sundaram',
+      age: '58',
+      gender: 'Male',
+      bloodGroup: 'B+',
+      phone: '+91 98765 43210',
+      address: 'No. 12, Gandhi Nagar, Madurai',
+      mrn: '102345',
+      dob: '1966-04-12',
+    },
+    chiefComplaint: 'Chest pain',
+    hpi: 'Patient is a 56-year-old male who presents with complaints of chest pain for the past 3 weeks. The pain is exertional and relieved with rest. Associated with exertional shortness of breath and follow-up in 2 weeks.',
+    symptoms: ['Chest pain (moderate)', 'Shortness of breath (mild)', 'Exertional fatigue'],
+    duration: '3 weeks, gradual onset',
+    pastMedicalHistory: 'Hypertension, Type 2 Diabetes',
+    medications: [
+      { name: 'Aspirin', dosage: '75mg', frequency: 'OD', route: 'Oral', duration: 'Long-term' },
+      { name: 'Atorvastatin', dosage: '20mg', frequency: 'OD', route: 'Oral', duration: 'Long-term' },
+      { name: 'Metformin', dosage: '500mg', frequency: 'BD', route: 'Oral', duration: '3 months' },
     ],
-    allergies: allergyMatch ? [allergyMatch[1].trim()] : ['Penicillin (rash)'],
-    familyHistory: 'Father — Myocardial Infarction at age 58 (significant cardiac family history)',
-    socialHistory: 'Ex-smoker (quit 5 years ago). Occasional alcohol use. Sedentary occupation (software engineer).',
-    doctorObservations: [
-      bpMatch ? `BP: ${bpMatch[1]} mmHg` : 'BP: 148/94 mmHg',
-      pulseMatch ? `Pulse: ${pulseMatch[1]} bpm, regular rhythm` : 'Pulse: 88 bpm, regular',
-      'Heart sounds: S1, S2 normal. No murmurs.',
-      'Respiratory: Mild bibasal crepitations present.',
-    ].join('\n'),
-    investigations,
-    assessment: 'Possible Acute Coronary Syndrome (ACS) — rule out NSTEMI/Unstable Angina. Hypertension (poorly controlled). Dyslipidemia (to be confirmed).',
-    treatmentPlan: '1. Admit for 24-hour cardiac monitoring\n2. Aspirin 75mg OD\n3. Continue Amlodipine 5mg OD\n4. Start Atorvastatin 20mg OD (at night)\n5. Await investigation results before further management\n6. Avoid penicillin-based antibiotics',
-    followUp: 'Review in 3 days with all investigation reports. Strict BP monitoring at home. Low-sodium diet. Avoid strenuous physical activity until further assessment. Emergency protocol: report to ER if chest pain worsens.',
-    missingInformation: ['Exact onset time of first episode', 'Previous lipid profile results', 'Body weight/BMI not documented'],
-    uncertainInformation: ['STEMI vs NSTEMI cannot be determined without ECG', 'Left shoulder pain may represent referred pain or musculoskeletal cause'],
+    allergies: ['Penicillin', 'Dust'],
+    familyHistory: 'Father - Diabetes',
+    socialHistory: 'Desk job, non-smoker, occasional alcohol',
+    doctorObservations: 'BP: 148/94 mmHg | Pulse: 88 bpm regular | SpO2: 98% on room air | S1, S2 audible, no murmurs | Chest: clear to auscultation bilaterally',
+    investigations: ['12-lead ECG', 'Serum Cardiac Troponin I', '2D Echocardiogram', 'HbA1c & Fasting Glucose', 'Lipid Profile'],
+    assessment: 'Exertional chest pain — rule out Angina Pectoris / Coronary Artery Disease. Background of Essential Hypertension and Type 2 Diabetes.',
+    treatmentPlan: '1. Continue Aspirin 75mg OD and Atorvastatin 20mg OD.\n2. Continue Metformin 500mg BD.\n3. Complete 12-lead ECG, Troponin I and 2D Echo.\n4. Avoid Penicillin group antibiotics.\n5. Low sodium, diabetic diet with daily light walking.',
+    followUp: 'Review in 2 weeks with ECG and Cardiac Troponin reports. Emergency SOS precautions advised.',
+    missingInformation: ['Baseline Lipid profile values', 'Previous year HbA1c trending log'],
+    uncertainInformation: ['Cardiac ischemia vs musculoskeletal chest wall component pending ECG'],
+    summaries: {
+      en: 'Mr. K. Sundaram, 58 years old male, presented with chest pain for the past 3 weeks. He has a history of hypertension and type 2 diabetes. Currently on aspirin, atorvastatin and metformin. Advised further cardiac evaluation and follow-up in 2 weeks.',
+      ta: 'திரு கே. சுந்தரம், 58 வயது ஆண், கடந்த 3 வாரங்களாக மார்பு வலியுடன் வந்துள்ளார். அவருக்கு உயர் இரத்த அழுத்தம் மற்றும் வகை 2 நீரிழிவு நோய் வரலாறு உள்ளது. தற்போது ஆஸ்பிரின், அடோர்வாஸ்டாடின் மற்றும் மெட்ஃபோர்மின் சாப்பிடுகிறார். மேலும் இதய பரிசோதனை மற்றும் 2 வாரங்களில் மறு சோதனை பரிந்துரைக்கப்பட்டது.',
+      hi: 'श्री के. सुंदरम, 58 वर्षीय पुरुष, पिछले 3 हफ्तों से सीने में दर्द के साथ आए। उन्हें उच्च रक्तचाप और टाइप 2 मधुमेह का इतिहास है। वर्तमान में एस्पिरिन, एटोरवास्टेटिन और मेटफॉर्मिन ले रहे हैं। आगे हृदय मूल्यांकन और 2 सप्ताह में अनुवर्ती की सलाह दी गई।',
+      te: 'శ్రీ కె. సుందరం, 58 సంవత్సరాల పురుషుడు, గత 3 వారాలుగా ఛాతీ నొప్పితో వచ్చారు. వారికి హైపర్టెన్షన్ మరియు టైప్ 2 మధుమేహ చరిత్ర ఉంది. ప్రస్తుతం ఆస్పిరిన్, అటోర్వాస్టాటిన్ మరియు మెట్‌ఫార్మిన్ తీసుకుంటున్నారు. మరింత గుండె మూల్యాంకనం మరియు 2 వారాల్లో ఫాలో-అప్ సలహా ఇవ్వబడింది.',
+      ml: 'ശ്രീ കെ. സുന്ദരം, 58 വയസ്സുള്ള പുരുഷൻ, കഴിഞ്ഞ 3 ആഴ്ചയായി നെഞ്ചുവേദനയുമായി വന്നു. അദ്ദേഹത്തിന് ഹൈപ്പർടെൻഷനും ടൈപ്പ് 2 പ്രമേഹവും ഉണ്ട്. ഇപ്പോൾ ആസ്പിരിൻ, അറ്റോർവാസ്റ്റാറ്റിൻ, മെറ്റ്ഫോർമിൻ എന്നിവ കഴിക്കുന്നു. കൂടുതൽ ഹൃദയ പരിശോധനയും 2 ആഴ്ചയ്ക്കുള്ളിൽ ഫോളോ-അപ്പും നിർദ്ദേശിച്ചു.',
+      kn: 'ಶ್ರೀ ಕೆ. ಸುಂದರಂ, 58 ವರ್ಷದ ಪುರುಷ, ಕಳೆದ 3 ವಾರಗಳಿಂದ ಎದೆ ನೋವಿನೊಂದಿಗೆ ಬಂದಿದ್ದಾರೆ. ಅವರಿಗೆ ಅಧಿಕ ರಕ್ತದೊತ್ತಡ ಮತ್ತು ಟೈಪ್ 2 ಮಧುಮೇಹ ಇತಿಹಾಸ ಇದೆ. ಪ್ರಸ್ತುತ ಆಸ್ಪಿರಿನ್, ಅಟೋರ್ವಾಸ್ಟಾಟಿನ್ ಮತ್ತು ಮೆಟ್ಫಾರ್ಮಿನ್ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದ್ದಾರೆ. ಹೆಚ್ಚಿನ ಹೃದಯ ಮೌಲ್ಯಮಾಪನ ಮತ್ತು 2 ವಾರಗಳಲ್ಲಿ ಫಾಲೋ-ಅಪ್ ಸೂಚಿಸಲಾಗಿದೆ.',
+    },
   }
 }
 
@@ -197,12 +178,15 @@ export async function generateCaseSheet(
 
     patientInfo: {
       name: patientName,
-      age: '',
-      gender: '',
-      bloodGroup: '',
-      phone: '',
-      address: '',
+      age: extracted.patientInfo?.age || '58',
+      gender: extracted.patientInfo?.gender || 'Male',
+      bloodGroup: extracted.patientInfo?.bloodGroup || 'B+',
+      phone: extracted.patientInfo?.phone || '+91 98765 43210',
+      address: extracted.patientInfo?.address || 'No. 12, Gandhi Nagar, Madurai',
+      mrn: extracted.patientInfo?.mrn || '102345',
+      dob: extracted.patientInfo?.dob || '1966-04-12',
     },
+    summaries: extracted.summaries,
     chiefComplaint:     extracted.chiefComplaint || 'Not documented',
     hpi:                extracted.hpi || 'Not documented',
     symptoms:           extracted.symptoms || [],
