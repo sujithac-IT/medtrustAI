@@ -1,0 +1,172 @@
+import i18n from 'i18next'
+import { initReactI18next } from 'react-i18next'
+
+const resources = {
+  en: {
+    translation: {
+      // App
+      app_name: 'MedTrust AI',
+      tagline: 'Clinical Intelligence Platform',
+      demo_mode: 'Demo Mode',
+      // Nav
+      nav_dashboard: 'Dashboard',
+      nav_consultation: 'New Consultation',
+      nav_patients: 'Patients',
+      nav_history: 'History',
+      nav_settings: 'Settings',
+      nav_logout: 'Logout',
+      // Auth
+      login_title: 'Welcome back',
+      login_subtitle: 'Sign in to MedTrust AI',
+      login_email: 'Email address',
+      login_password: 'Password',
+      login_btn: 'Sign In',
+      login_demo: 'Quick Demo Login',
+      role_doctor: 'Doctor',
+      role_patient: 'Patient',
+      // Dashboard
+      dashboard_title: 'Dashboard',
+      total_patients: 'Total Patients',
+      consultations_today: "Today's Consultations",
+      approved_sheets: 'Approved Case Sheets',
+      pending_review: 'Pending Review',
+      recent_consultations: 'Recent Consultations',
+      // Consultation
+      start_consultation: 'Start Consultation',
+      end_consultation: 'End Consultation',
+      generate_case_sheet: 'Generate Case Sheet',
+      live_transcript: 'Live Transcript',
+      // Case Sheet
+      case_sheet_title: 'Clinical Case Sheet',
+      patient_info: 'Patient Information',
+      chief_complaint: 'Chief Complaint',
+      hpi: 'History of Present Illness',
+      symptoms: 'Symptoms',
+      duration: 'Duration',
+      past_history: 'Past Medical History',
+      medications: 'Current Medications',
+      allergies: 'Allergies',
+      family_history: 'Family History',
+      social_history: 'Social History',
+      doctor_observations: 'Doctor Observations',
+      investigations: 'Investigations Ordered',
+      assessment: 'Assessment / Diagnosis',
+      treatment_plan: 'Treatment Plan',
+      followup: 'Follow-up Instructions',
+      missing_info: 'Missing Information',
+      uncertain_info: 'Uncertain Information',
+      approve_sheet: 'Approve Case Sheet',
+      approved: 'Approved',
+      pending: 'Pending Approval',
+      // Patients
+      patients_title: 'Patient Management',
+      new_patient: 'New Patient',
+      search_patients: 'Search patients...',
+      // Common
+      save: 'Save',
+      cancel: 'Cancel',
+      edit: 'Edit',
+      preview: 'Preview',
+      print: 'Print',
+      download_pdf: 'Download PDF',
+      loading: 'Loading...',
+      generating: 'Generating with AI...',
+      success: 'Success',
+      error: 'Error',
+      age: 'Age',
+      years: 'years',
+      date: 'Date',
+      time: 'Time',
+      status: 'Status',
+    },
+  },
+  ta: {
+    translation: {
+      app_name: 'மெட்ட்ரஸ்ட் AI',
+      tagline: 'மருத்துவ நுண்ணறிவு தளம்',
+      nav_dashboard: 'டாஷ்போர்டு',
+      nav_consultation: 'புதிய ஆலோசனை',
+      nav_patients: 'நோயாளிகள்',
+      nav_history: 'வரலாறு',
+      login_title: 'மீண்டும் வரவேற்கிறோம்',
+      role_doctor: 'மருத்துவர்',
+      role_patient: 'நோயாளி',
+      start_consultation: 'ஆலோசனை தொடங்கு',
+      generate_case_sheet: 'வழக்கு தாள் உருவாக்கு',
+      case_sheet_title: 'மருத்துவ வழக்கு தாள்',
+      approved: 'அங்கீகரிக்கப்பட்டது',
+      pending: 'நிலுவையில் உள்ளது',
+      loading: 'ஏற்றுகிறது...',
+    },
+  },
+  hi: {
+    translation: {
+      app_name: 'मेड्ट्रस्ट AI',
+      tagline: 'नैदानिक बुद्धिमत्ता प्लेटफ़ॉर्म',
+      nav_dashboard: 'डैशबोर्ड',
+      nav_consultation: 'नई परामर्श',
+      nav_patients: 'मरीज़',
+      nav_history: 'इतिहास',
+      login_title: 'वापस स्वागत है',
+      role_doctor: 'डॉक्टर',
+      role_patient: 'मरीज़',
+      start_consultation: 'परामर्श शुरू करें',
+      generate_case_sheet: 'केस शीट बनाएं',
+      case_sheet_title: 'नैदानिक केस शीट',
+      approved: 'स्वीकृत',
+      pending: 'समीक्षा बाकी',
+      loading: 'लोड हो रहा है...',
+    },
+  },
+  te: {
+    translation: {
+      app_name: 'మెడ్‌ట్రస్ట్ AI',
+      tagline: 'క్లినికల్ ఇంటెలిజెన్స్ ప్లాట్‌ఫారమ్',
+      nav_dashboard: 'డాష్‌బోర్డ్',
+      nav_patients: 'రోగులు',
+      role_doctor: 'వైద్యుడు',
+      role_patient: 'రోగి',
+      loading: 'లోడవుతోంది...',
+    },
+  },
+  ml: {
+    translation: {
+      app_name: 'മെഡ്‌ട്രസ്റ്റ് AI',
+      tagline: 'ക്ലിനിക്കൽ ഇന്റലിജൻസ് പ്ലാറ്റ്ഫോം',
+      nav_dashboard: 'ഡാഷ്‌ബോർഡ്',
+      nav_patients: 'രോഗികൾ',
+      role_doctor: 'ഡോക്ടർ',
+      role_patient: 'രോഗി',
+      loading: 'ലോഡ് ചെയ്യുന്നു...',
+    },
+  },
+  kn: {
+    translation: {
+      app_name: 'ಮೆಡ್‌ಟ್ರಸ್ಟ್ AI',
+      tagline: 'ಕ್ಲಿನಿಕಲ್ ಇಂಟೆಲಿಜೆನ್ಸ್ ಪ್ಲ್ಯಾಟ್‌ಫಾರ್ಮ್',
+      nav_dashboard: 'ಡ್ಯಾಶ್‌ಬೋರ್ಡ್',
+      nav_patients: 'ರೋಗಿಗಳು',
+      role_doctor: 'ವೈದ್ಯರು',
+      role_patient: 'ರೋಗಿ',
+      loading: 'ಲೋಡ್ ಆಗುತ್ತಿದೆ...',
+    },
+  },
+}
+
+i18n.use(initReactI18next).init({
+  resources,
+  lng: 'en',
+  fallbackLng: 'en',
+  interpolation: { escapeValue: false },
+})
+
+export default i18n
+
+export const SUPPORTED_LANGUAGES = [
+  { code: 'en', name: 'English',    nativeName: 'English',    flag: '🇬🇧', speechCode: 'en-IN' },
+  { code: 'ta', name: 'Tamil',      nativeName: 'தமிழ்',      flag: '🇮🇳', speechCode: 'ta-IN' },
+  { code: 'hi', name: 'Hindi',      nativeName: 'हिंदी',       flag: '🇮🇳', speechCode: 'hi-IN' },
+  { code: 'te', name: 'Telugu',     nativeName: 'తెలుగు',     flag: '🇮🇳', speechCode: 'te-IN' },
+  { code: 'ml', name: 'Malayalam',  nativeName: 'മലയാളം',     flag: '🇮🇳', speechCode: 'ml-IN' },
+  { code: 'kn', name: 'Kannada',    nativeName: 'ಕನ್ನಡ',      flag: '🇮🇳', speechCode: 'kn-IN' },
+]
