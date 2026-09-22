@@ -151,31 +151,33 @@ a:hover { color: var(--color-teal-hover); }
 .app-layout {
   display: flex;
   min-height: 100vh;
+  width: 100%;
   background-color: var(--color-bg-primary);
 }
 
 .main-content {
   flex: 1;
-  margin-left: 260px;
+  min-width: 0;
+  margin-left: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg-primary);
-  transition: margin-left var(--transition-base);
 }
 
 .page-container {
-  padding: 20px 24px;
+  padding: 16px 24px;
   flex: 1;
+  min-width: 0;
 }
 
 /* ─── Sidebar (Hospital Clean Aesthetic) ───────────────────────────────────── */
 .sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 260px;
+  width: 250px;
+  flex: 0 0 250px;
   height: 100vh;
+  position: sticky;
+  top: 0;
   background: #FFFFFF;
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -628,8 +630,11 @@ a:hover { color: var(--color-teal-hover); }
 
 /* ─── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .main-content { margin-left: 0; }
   .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
     transform: translateX(-100%);
     transition: transform var(--transition-base);
   }

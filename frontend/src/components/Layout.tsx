@@ -46,6 +46,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return 'Dashboard'
   }
 
+  const isConsultation = location.pathname.startsWith('/consultation')
+
+  // Full-width, uncluttered Google Meet experience during live consultation
+  if (isConsultation) {
+    return (
+      <div style={{
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        backgroundColor: '#F8FAFD',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div className="app-layout">
       {/* Sidebar overlay on mobile */}

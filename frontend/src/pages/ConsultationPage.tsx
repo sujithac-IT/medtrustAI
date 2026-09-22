@@ -303,70 +303,15 @@ export default function ConsultationPage() {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      gap: 14,
-      height: 'calc(100vh - 110px)',
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Inter', sans-serif",
+      gap: 10,
+      height: '100vh',
+      width: '100vw',
+      padding: '12px 16px',
+      boxSizing: 'border-box',
+      backgroundColor: '#F8FAFD',
+      fontFamily: "'Inter', 'Roboto', -apple-system, sans-serif",
+      overflow: 'hidden',
     }}>
-      {/* ─── WAITING ROOM ADMISSION ALERT BANNER (HOST PRIVILEGE) ─── */}
-      {waitingPatients.length > 0 && (
-        <div style={{
-          backgroundColor: '#EFF6FF',
-          border: '1px solid #BFDBFE',
-          borderRadius: 12,
-          padding: '10px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          boxShadow: '0 2px 6px rgba(0, 102, 255, 0.08)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 34,
-              height: 34,
-              borderRadius: '50%',
-              backgroundColor: '#0066FF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-            }}>
-              <WaitingRoomIcon size={18} color="#FFFFFF" />
-            </div>
-            <div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1E3A8A' }}>
-                Waiting Room ({waitingPatients.length} Patient):
-              </span>
-              <span style={{ fontSize: 13, color: '#1E40AF', marginLeft: 6 }}>
-                {waitingPatients[0].name} ({waitingPatients[0].gender}, {waitingPatients[0].age}y • {waitingPatients[0].email}) is waiting to join
-              </span>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              onClick={() => handleAdmitPatient(waitingPatients[0])}
-              style={{
-                backgroundColor: '#0066FF',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: 6,
-                padding: '7px 18px',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: '0 2px 8px rgba(0,102,255,0.3)',
-              }}
-            >
-              <StethoscopeIcon size={15} color="#FFFFFF" />
-              Admit Patient to Live Session
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Toast Alert on Admission */}
       {admitSuccessToast && (
         <div style={{
@@ -380,167 +325,207 @@ export default function ConsultationPage() {
           display: 'flex',
           alignItems: 'center',
           gap: 8,
+          flexShrink: 0,
         }}>
           <span>✓</span>
           <span>{admitSuccessToast}</span>
         </div>
       )}
 
-      {/* ─── EKA.CARE CLINICAL HEADER ─── */}
+      {/* ─── GOOGLE MEET CLINICAL HEADER ─── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '10px 20px',
+        padding: '8px 16px',
         backgroundColor: '#FFFFFF',
         borderRadius: 12,
         border: '1px solid #E2E8F0',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
         flexShrink: 0,
+        gap: 16,
       }}>
-        {/* Left: Consultation Title + Status + Google Meet Pill */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0F172A', margin: 0 }}>
-              Live Teleconsultation
-            </h1>
-            <span style={{
-              fontSize: 11,
-              backgroundColor: '#EFF6FF',
-              color: '#0066FF',
-              padding: '2px 8px',
-              borderRadius: 4,
-              fontWeight: 700,
-              border: '1px solid #BFDBFE',
-            }}>
-              EKA EMR • HOST
-            </span>
-          </div>
-
+        {/* Left: Brand + Meeting Room Link + Host Badge + Timer */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'nowrap' }}>
           <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 10px',
-            backgroundColor: '#ECFDF5',
-            borderRadius: 20,
-            border: '1px solid #A7F3D0',
-          }}>
-            <span style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              backgroundColor: '#10B981',
-              display: 'inline-block',
-            }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#047857' }}>In Progress</span>
-          </div>
-
-          <span style={{
-            fontSize: 15,
-            fontWeight: 800,
-            color: '#0F172A',
-            fontFamily: 'monospace',
-          }}>
-            {formatTimer(elapsedSeconds)}
-          </span>
-
-          {/* Linked Email Google Meet Pill */}
-          <div style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            background: 'linear-gradient(135deg, #1A73E8 0%, #007A64 100%)',
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            padding: '5px 12px',
-            backgroundColor: '#F8FAFC',
-            borderRadius: 8,
-            border: '1px solid #E2E8F0',
+            justifyContent: 'center',
+            color: '#FFFFFF',
           }}>
-            <VideoMeetIcon size={16} color="#0066FF" />
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#0066FF' }}>Google Meet:</span>
-            <span style={{ fontSize: 12, color: '#475569', fontFamily: 'monospace' }}>
+            <VideoMeetIcon size={18} color="#FFFFFF" />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, color: '#0F172A', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
               meet.google.com/{meetingCode}
             </span>
-
-            {/* Copy Link Button */}
             <button
               onClick={handleCopyMeetLink}
               style={{
-                backgroundColor: copySuccess ? '#ECFDF5' : '#FFFFFF',
-                color: copySuccess ? '#059669' : '#0F172A',
+                backgroundColor: copySuccess ? '#ECFDF5' : '#F1F5F9',
+                color: copySuccess ? '#059669' : '#0B57D0',
                 border: '1px solid #CBD5E1',
                 borderRadius: 4,
                 padding: '3px 8px',
                 fontSize: 11,
                 cursor: 'pointer',
                 fontWeight: 600,
+                whiteSpace: 'nowrap',
               }}
             >
-              {copySuccess ? '✓ Copied!' : 'Copy Link'}
+              {copySuccess ? '✓ Copied' : 'Copy'}
             </button>
+            <span style={{
+              fontSize: 10,
+              backgroundColor: '#EFF6FF',
+              color: '#0B57D0',
+              padding: '2px 8px',
+              borderRadius: 4,
+              fontWeight: 700,
+              border: '1px solid #BFDBFE',
+              whiteSpace: 'nowrap',
+            }}>
+              DOCTOR HOST
+            </span>
+          </div>
 
-            {/* Email Invite Modal Trigger */}
-            <button
-              onClick={() => setShowInviteModal(true)}
-              style={{
-                backgroundColor: '#EFF6FF',
-                color: '#0066FF',
-                border: '1px solid #BFDBFE',
-                borderRadius: 4,
-                padding: '3px 10px',
-                fontSize: 11,
-                cursor: 'pointer',
-                fontWeight: 700,
-              }}
-            >
-              ✉️ Email Invite
-            </button>
-
-            {/* Open Waiting Room Test */}
-            <button
-              onClick={() => window.open(generatePatientMeetingUrl(meetingCode, doctorEmail, patientEmail), '_blank')}
-              style={{
-                backgroundColor: '#F1F5F9',
-                color: '#475569',
-                border: 'none',
-                borderRadius: 4,
-                padding: '3px 8px',
-                fontSize: 11,
-                cursor: 'pointer',
-                fontWeight: 500,
-              }}
-              title="Test patient joining in a separate tab"
-            >
-              Patient View ↗
-            </button>
+          {/* Call Status & Timer */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px 10px',
+            backgroundColor: '#ECFDF5',
+            borderRadius: 20,
+            border: '1px solid #A7F3D0',
+            whiteSpace: 'nowrap',
+          }}>
+            <span style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              backgroundColor: '#10B981',
+              display: 'inline-block',
+            }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#047857' }}>
+              In Progress ({formatTimer(elapsedSeconds)})
+            </span>
           </div>
         </div>
 
-        {/* Right: Host Doctor Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: '#0066FF',
+        {/* Center: Waiting Patient Quick Admission Pill */}
+        {waitingPatients.length > 0 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: '#EFF6FF',
+            padding: '4px 12px',
+            borderRadius: 8,
+            border: '1px solid #BFDBFE',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF', whiteSpace: 'nowrap' }}>
+              👤 {waitingPatients[0].name} waiting to join
+            </span>
+            <button
+              onClick={() => handleAdmitPatient(waitingPatients[0])}
+              style={{
+                backgroundColor: '#0B57D0',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 4,
+                padding: '4px 12px',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Admit Patient
+            </button>
+          </div>
+        )}
+
+        {/* Right: Actions, Doctor Profile, and Exit to Dashboard */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap' }}>
+          {/* Email Invite Button */}
+          <button
+            onClick={() => setShowInviteModal(true)}
+            style={{
+              backgroundColor: '#EFF6FF',
+              color: '#0B57D0',
+              border: '1px solid #BFDBFE',
+              borderRadius: 6,
+              padding: '5px 12px',
+              fontSize: 12,
+              cursor: 'pointer',
+              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: 13,
-            }}>
-              RS
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
-                Dr. Rajesh Sharma, MD
-              </span>
-              <span style={{ fontSize: 11, color: '#0066FF', fontWeight: 600 }}>
-                {doctorEmail}
-              </span>
-            </div>
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ✉️ Email Invite
+          </button>
+
+          {/* Test Patient View in New Tab */}
+          <button
+            onClick={() => window.open(generatePatientMeetingUrl(meetingCode, doctorEmail, patientEmail), '_blank')}
+            style={{
+              backgroundColor: '#F8FAFC',
+              color: '#475569',
+              border: '1px solid #CBD5E1',
+              borderRadius: 6,
+              padding: '5px 10px',
+              fontSize: 12,
+              cursor: 'pointer',
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+            }}
+            title="Open patient waiting room in new tab to test dual interaction"
+          >
+            Patient View ↗
+          </button>
+
+          {/* Doctor Avatar */}
+          <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            backgroundColor: '#0B57D0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#FFFFFF',
+            fontWeight: 800,
+            fontSize: 12,
+          }}>
+            RS
           </div>
+
+          {/* Exit to Dashboard Button */}
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              backgroundColor: '#F1F5F9',
+              color: '#334155',
+              border: '1px solid #CBD5E1',
+              borderRadius: 6,
+              padding: '5px 12px',
+              fontSize: 12,
+              cursor: 'pointer',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Exit to EMR &rarr;
+          </button>
         </div>
       </div>
 
@@ -549,11 +534,11 @@ export default function ConsultationPage() {
         flex: 1,
         display: 'grid',
         gridTemplateColumns: '1fr 380px',
-        gap: 14,
+        gap: 12,
         minHeight: 0,
       }}>
         {/* Left Column: Interactive Google Meet Room (Live Cameras + YouTube Captions) */}
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
           <MeetRoom
             isRecording={isRecording}
             onToggleRecording={toggleRecording}
@@ -571,14 +556,14 @@ export default function ConsultationPage() {
         </div>
 
         {/* Right Column: AI Ambient Clinical Scribe & Case Sheet Generator */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', height: '100%' }}>
           {/* Live Transcript Card */}
           <div style={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             padding: 14,
-            minHeight: 240,
+            minHeight: 0,
             overflow: 'hidden',
             backgroundColor: '#FFFFFF',
             borderRadius: 12,
@@ -590,9 +575,10 @@ export default function ConsultationPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              paddingBottom: 10,
+              paddingBottom: 8,
               borderBottom: '1px solid #F1F5F9',
               marginBottom: 8,
+              flexShrink: 0,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <SparklesIcon size={16} color="#0066FF" />
@@ -631,115 +617,40 @@ export default function ConsultationPage() {
             />
           </div>
 
-          {/* Quick Actions Card */}
+          {/* Primary Action Card: Generate AI Case Sheet */}
           <div style={{
             padding: 14,
             backgroundColor: '#FFFFFF',
             borderRadius: 12,
             border: '1px solid #E2E8F0',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            flexShrink: 0,
           }}>
-            <div style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#64748B',
-              marginBottom: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}>
-              Clinical Workflow Actions
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* Primary: Generate AI Case Sheet */}
-              <button
-                id="generate-case-sheet-btn"
-                onClick={handleGenerateCaseSheet}
-                disabled={isGenerating}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  backgroundColor: '#0066FF',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  boxShadow: '0 4px 14px rgba(0, 102, 255, 0.3)',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <ClipboardMedicalIcon size={18} color="#FFFFFF" />
-                <span>{isGenerating ? 'Compiling Medical Case Sheet...' : 'Generate AI Case Sheet'}</span>
-              </button>
-
-              {/* View Longitudinal Patient History */}
-              <button
-                onClick={() => navigate('/history')}
-                style={{
-                  width: '100%',
-                  padding: '9px 14px',
-                  backgroundColor: '#F8FAFC',
-                  color: '#1E293B',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
-              >
-                <PulseIcon size={16} color="#007A64" />
-                <span>View Patient Clinical History</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Eka.care & NVIDIA Compliance Info */}
-          <div style={{
-            padding: 12,
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-            fontSize: 11,
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 8,
-            }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                Interoperability Status
-              </span>
-              <span style={{ fontSize: 10, color: '#047857', fontWeight: 700, backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: 4 }}>
-                ABDM Verified
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Patient Email:</span>
-                <span style={{ fontWeight: 600, color: '#0F172A' }}>{patientEmail}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Doctor Email:</span>
-                <span style={{ fontWeight: 600, color: '#0F172A' }}>{doctorEmail}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Live Translation:</span>
-                <span style={{ fontWeight: 700, color: '#0066FF' }}>YouTube-style CC Active</span>
-              </div>
-            </div>
+            <button
+              id="generate-case-sheet-btn"
+              onClick={handleGenerateCaseSheet}
+              disabled={isGenerating}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                backgroundColor: '#0066FF',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                boxShadow: '0 4px 14px rgba(0, 102, 255, 0.3)',
+                transition: 'all 0.2s',
+              }}
+            >
+              <ClipboardMedicalIcon size={18} color="#FFFFFF" />
+              <span>{isGenerating ? 'Compiling Medical Case Sheet...' : '⚡ Generate 17-Section Case Sheet'}</span>
+            </button>
           </div>
         </div>
       </div>

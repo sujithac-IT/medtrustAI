@@ -649,10 +649,10 @@ export default function MeetRoom({
         gap: 16,
       }}>
         {/* Left: Meeting Info Pill with linked email attendees */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                 {meetLink}
               </span>
               <span style={{
@@ -662,12 +662,13 @@ export default function MeetRoom({
                 padding: '2px 6px',
                 borderRadius: 4,
                 fontWeight: 700,
+                whiteSpace: 'nowrap',
               }}>
                 ABDM Verified
               </span>
             </div>
-            <span style={{ fontSize: 11, color: '#64748B' }}>
-              Attendees: {doctorEmail} &amp; {patientEmail}
+            <span style={{ fontSize: 11, color: '#64748B', whiteSpace: 'nowrap' }}>
+              Doctor Host: {doctorEmail}
             </span>
           </div>
         </div>
