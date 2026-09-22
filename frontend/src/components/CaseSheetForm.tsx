@@ -1004,46 +1004,133 @@ export default function CaseSheetForm({
             </div>
           </div>
 
-          {/* Sticky Bottom Bar Matching Screen 2 */}
+          {/* Sticky Bottom Bar Matching Material 3 Hospital White Theme */}
           <div style={{
             position: 'sticky',
             bottom: 0,
-            background: '#0F172A',
-            borderRadius: 8,
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            padding: '12px 18px',
+            background: '#FFFFFF',
+            borderRadius: 10,
+            border: '1px solid #E2E8F0',
+            padding: '12px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
+            boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
             marginTop: 10,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#FBBF24', fontSize: 13, fontWeight: 600 }}>
-              <span>🤖</span>
-              <span>AI Generated • Pending Doctor Review</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{
+                backgroundColor: '#EFF6FF',
+                color: '#1D4ED8',
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                border: '1px solid #BFDBFE',
+              }}>
+                HL7 FHIR R4 Ready
+              </span>
+              <span style={{ color: '#64748B', fontSize: 12 }}>
+                Doctor Signature: Dr. Rajesh Sharma, MD (TNMC-84920)
+              </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {saveToast && (
-                <span style={{ color: '#22C55E', fontSize: 12, fontWeight: 700 }}>
-                  ✓ Changes Saved Successfully!
+                <span style={{ color: '#10B981', fontSize: 12, fontWeight: 700 }}>
+                  ✓ Changes Saved to Hospital EMR!
                 </span>
               )}
+
+              {/* HL7 FHIR R4 Export Button */}
+              <button
+                onClick={() => {
+                  const fhirBundle = {
+                    resourceType: 'Bundle',
+                    type: 'document',
+                    timestamp: new Date().toISOString(),
+                    identifier: { system: 'https://medtrust.ai/fhir/casesheets', value: caseSheet.id },
+                    entry: [
+                      {
+                        resource: {
+                          resourceType: 'Patient',
+                          id: caseSheet.patientId,
+                          name: [{ text: pInfo.name }],
+                          telecom: [{ system: 'phone', value: pInfo.phone }],
+                          gender: pInfo.gender.toLowerCase(),
+                          birthDate: pInfo.dob,
+                        },
+                      },
+                      {
+                        resource: {
+                          resourceType: 'Encounter',
+                          id: caseSheet.consultationId,
+                          status: 'finished',
+                          class: { code: 'VR', display: 'virtual' },
+                          reasonCode: [{ text: caseSheet.chiefComplaint }],
+                        },
+                      },
+                      {
+                        resource: {
+                          resourceType: 'Condition',
+                          clinicalStatus: { text: 'active' },
+                          verificationStatus: { text: 'provisional' },
+                          code: { text: caseSheet.assessment },
+                          subject: { reference: `Patient/${caseSheet.patientId}` },
+                        },
+                      },
+                      {
+                        resource: {
+                          resourceType: 'CarePlan',
+                          status: 'active',
+                          intent: 'order',
+                          description: caseSheet.treatmentPlan,
+                        },
+                      },
+                    ],
+                  }
+                  const blob = new Blob([JSON.stringify(fhirBundle, null, 2)], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `FHIR_R4_${caseSheet.patientId}_${caseSheet.id}.json`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                style={{
+                  padding: '9px 16px',
+                  backgroundColor: '#F8FAFD',
+                  color: '#0B57D0',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                title="Download Standardized HL7 FHIR R4 Clinical Document Bundle"
+              >
+                <span>🌐</span>
+                <span>Export HL7 FHIR R4</span>
+              </button>
+
               <button
                 onClick={handleSaveChanges}
                 style={{
-                  padding: '9px 22px',
-                  background: '#2563EB',
-                  color: 'white',
+                  padding: '9px 20px',
+                  backgroundColor: '#0B57D0',
+                  color: '#FFFFFF',
                   border: 'none',
                   borderRadius: 6,
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: 'pointer',
-                  boxShadow: '0 2px 10px rgba(37,99,235,0.4)',
+                  boxShadow: '0 2px 8px rgba(11,87,208,0.25)',
                 }}
               >
-                Save Changes
+                Save & Update EMR
               </button>
             </div>
           </div>

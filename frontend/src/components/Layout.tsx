@@ -4,16 +4,18 @@ import { useAuth } from '../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { SUPPORTED_LANGUAGES } from '../i18n/config'
 import i18n from '../i18n/config'
-
-const NAV_ITEMS = [
-  { to: '/dashboard',            icon: '⬡',  label: 'Dashboard',            section: 'main' },
-  { to: '/consultation',         icon: '📹',  label: 'Live Consultation',     section: 'main', highlight: true },
-  { to: '/patients',             icon: '👥',  label: 'Patients',              section: 'main' },
-  { to: '/case-sheets',          icon: '📋',  label: 'Case Sheets',           section: 'main' },
-  { to: '/history',              icon: '🕒',  label: 'Consultation History',  section: 'main' },
-  { to: '/multilingual-summary', icon: '🌐',  label: 'Multilingual Summary',  section: 'tools' },
-  { to: '/settings',             icon: '⚙️',  label: 'Settings',              section: 'tools' },
-]
+import {
+  StethoscopeIcon,
+  HospitalCrossIcon,
+  PulseIcon,
+  ClipboardMedicalIcon,
+  WaitingRoomIcon,
+  GlobeLanguageIcon,
+  DoctorHostIcon,
+  PatientIcon,
+  VideoMeetIcon,
+  ShieldCheckIcon,
+} from './MedicalIcons'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
@@ -28,90 +30,138 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     navigate('/login')
   }
 
-  const initials = user?.displayName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'
-  const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === i18n.language) || SUPPORTED_LANGUAGES[0]
-
-  const mainItems = NAV_ITEMS.filter(n => n.section === 'main')
-  const toolItems = NAV_ITEMS.filter(n => n.section === 'tools')
+  const initials = user?.displayName?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'DR'
+  const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === i18n.language) || SUPPORTED_LANGUAGES[0]
 
   const getPageTitle = () => {
     const path = location.pathname
     if (path.includes('/consultation')) return 'Live Consultation'
     if (path.includes('/patients')) return 'Patient Management'
     if (path.includes('/case-sheet')) return 'Clinical Case Sheet'
-    if (path.includes('/case-sheets')) return 'Case Sheets'
+    if (path.includes('/case-sheets')) return 'Clinical Case Sheets'
     if (path.includes('/history')) return 'Consultation History'
-    if (path.includes('/multilingual-summary')) return 'Multilingual Summary'
+    if (path.includes('/multilingual-summary')) return 'Multilingual Scribe'
+    if (path.includes('/waiting-room')) return 'Patient Waiting Area'
     if (path.includes('/settings')) return 'Settings'
     return 'Dashboard'
   }
 
   return (
     <div className="app-layout">
-      {/* Background decoration */}
-      <div className="page-bg-decoration" />
-
       {/* Sidebar overlay on mobile */}
       {sidebarOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 49, backdropFilter: 'blur(4px)' }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 49, backdropFilter: 'blur(4px)' }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar with Hospital Material 3 Theme */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">⚕️</div>
+          <div className="sidebar-logo-icon">
+            <HospitalCrossIcon size={22} color="#FFFFFF" />
+          </div>
           <div className="sidebar-logo-text">
             <span className="sidebar-logo-name">MedTrust AI</span>
-            <span className="sidebar-logo-sub">AI-Powered Clinical Care</span>
+            <span className="sidebar-logo-sub">Clinical Intelligence</span>
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="sidebar-nav">
           <span className="sidebar-section-label">Main Menu</span>
-          {mainItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-              style={item.highlight ? {
-                background: 'linear-gradient(135deg, rgba(0,212,170,0.15), rgba(56,189,248,0.1))',
-              } : {}}
-            >
-              <span style={{ fontSize: 17 }}>{item.icon}</span>
-              <span style={{ flex: 1 }}>{item.label}</span>
-            </NavLink>
-          ))}
 
-          <span className="sidebar-section-label" style={{ marginTop: 12 }}>Tools & Settings</span>
+          <NavLink
+            to="/dashboard"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <PulseIcon size={18} color="currentColor" />
+            <span>Dashboard</span>
+          </NavLink>
 
-          {toolItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span style={{ fontSize: 17 }}>{item.icon}</span>
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          <NavLink
+            to="/consultation"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              backgroundColor: location.pathname.includes('/consultation') ? '#EFF6FF' : undefined,
+              color: location.pathname.includes('/consultation') ? '#0B57D0' : undefined,
+            }}
+          >
+            <VideoMeetIcon size={18} color="currentColor" />
+            <span style={{ flex: 1 }}>Live Consultation</span>
+            <span style={{
+              fontSize: 10,
+              backgroundColor: '#10B981',
+              color: '#FFFFFF',
+              padding: '1px 6px',
+              borderRadius: 10,
+              fontWeight: 700,
+            }}>
+              HOST
+            </span>
+          </NavLink>
+
+          <NavLink
+            to="/patients"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <PatientIcon size={18} color="currentColor" />
+            <span>Patients</span>
+          </NavLink>
+
+          <NavLink
+            to="/case-sheets"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <ClipboardMedicalIcon size={18} color="currentColor" />
+            <span>Case Sheets</span>
+          </NavLink>
+
+          <NavLink
+            to="/history"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <WaitingRoomIcon size={18} color="currentColor" />
+            <span>Consultation History</span>
+          </NavLink>
+
+          <span className="sidebar-section-label" style={{ marginTop: 14 }}>Clinical AI & Tools</span>
+
+          <NavLink
+            to="/multilingual-summary"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <GlobeLanguageIcon size={18} color="currentColor" />
+            <span>Multilingual Scribe</span>
+          </NavLink>
+
+          <NavLink
+            to="/waiting-room"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <StethoscopeIcon size={18} color="currentColor" />
+            <span>Waiting Room Preview</span>
+          </NavLink>
 
           {/* Language selector */}
           <div style={{ position: 'relative', marginTop: 4 }}>
             <button
               className="nav-item"
-              style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start', border: 'none', cursor: 'pointer' }}
+              style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent', cursor: 'pointer' }}
               onClick={() => setLangMenuOpen(!langMenuOpen)}
             >
-              <span style={{ fontSize: 17 }}>🌍</span>
+              <GlobeLanguageIcon size={18} color="currentColor" />
               <span style={{ flex: 1 }}>Language</span>
-              <span style={{ fontSize: 11, color: 'var(--color-teal)', background: 'var(--color-teal-dim)', borderRadius: 4, padding: '2px 6px' }}>
+              <span style={{ fontSize: 11, color: '#0B57D0', backgroundColor: '#EFF6FF', borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>
                 {currentLang.flag} {currentLang.name}
               </span>
             </button>
@@ -119,27 +169,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {langMenuOpen && (
               <div style={{
                 position: 'absolute',
-                left: '100%',
-                top: 0,
-                background: 'var(--color-bg-secondary)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                padding: 8,
-                minWidth: 160,
+                left: 0,
+                bottom: '100%',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: 6,
+                minWidth: 190,
                 zIndex: 200,
-                boxShadow: 'var(--shadow-lg)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
               }}>
-                {SUPPORTED_LANGUAGES.map(lang => (
+                {SUPPORTED_LANGUAGES.map((lang) => (
                   <button
                     key={lang.code}
                     onClick={() => { i18n.changeLanguage(lang.code); setLangMenuOpen(false) }}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                      padding: '8px 12px',
-                      background: i18n.language === lang.code ? 'var(--color-teal-dim)' : 'transparent',
-                      border: 'none', borderRadius: 'var(--radius-sm)',
-                      color: i18n.language === lang.code ? 'var(--color-teal)' : 'var(--color-text-secondary)',
-                      cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      padding: '7px 10px',
+                      backgroundColor: i18n.language === lang.code ? '#EFF6FF' : 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: i18n.language === lang.code ? '#0B57D0' : '#475569',
+                      cursor: 'pointer',
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      textAlign: 'left',
                     }}
                   >
                     <span>{lang.flag}</span>
@@ -152,32 +209,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <button
             className="nav-item"
-            style={{ width: '100%', color: 'var(--color-danger)', border: 'none', background: 'transparent', cursor: 'pointer', marginTop: 4 }}
+            style={{ width: '100%', color: '#DC2626', border: 'none', background: 'transparent', cursor: 'pointer', marginTop: 8 }}
             onClick={handleLogout}
           >
-            <span style={{ fontSize: 17 }}>🚪</span>
+            <span style={{ fontSize: 16 }}>🚪</span>
             <span>Logout</span>
           </button>
         </nav>
 
-        {/* User card at bottom */}
+        {/* User Card (Host Attending Doctor) */}
         <div className="sidebar-user">
           <div className="sidebar-user-card">
             <div className="sidebar-avatar">{initials}</div>
             <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{user?.displayName}</div>
+              <div className="sidebar-user-name">{user?.displayName || 'Dr. Rajesh Sharma, MD'}</div>
               <div className="sidebar-user-role">
-                {user?.role === 'doctor'
-                  ? `Senior Doctor • MD`
-                  : 'Patient'}
+                <span style={{ color: '#0B57D0', fontWeight: 600 }}>Senior Consultant</span> • Host
               </div>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="main-content content-wrapper">
+      {/* Main Content Area */}
+      <main className="main-content">
         {/* Topbar */}
         <header className="topbar">
           <button
@@ -189,51 +244,51 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             ☰
           </button>
 
-          {/* Page title and date */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Page Title & Timestamp */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A' }}>
                 {getPageTitle()}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              <div style={{ fontSize: 11, color: '#64748B' }}>
                 {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
             </div>
           </div>
 
           <div className="topbar-actions">
-            {/* Google Meet status badge */}
+            {/* Google Meet Connected Badge */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
               padding: '5px 12px',
-              background: 'rgba(34,197,94,0.1)',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid rgba(34,197,94,0.3)',
+              backgroundColor: '#ECFDF5',
+              borderRadius: 20,
+              border: '1px solid #A7F3D0',
               fontSize: 12,
             }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block', boxShadow: '0 0 6px var(--color-success)' }} />
-              <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>Google Meet • Connected</span>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+              <span style={{ fontWeight: 600, color: '#047857' }}>Google Meet • Connected</span>
             </div>
 
-            {/* Notifications */}
-            <button className="btn btn-ghost btn-icon" style={{ position: 'relative' }}>
-              <span style={{ fontSize: 18 }}>🔔</span>
-              <span style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: 'var(--color-danger)', border: '2px solid var(--color-bg-primary)' }} />
-            </button>
-
-            {/* User avatar + name */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Doctor Profile Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 6 }}>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>{user?.displayName}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Senior Doctor • MD</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                  {user?.displayName || 'Dr. Rajesh Sharma, MD'}
+                </div>
+                <div style={{ fontSize: 11, color: '#64748B' }}>Cardiology & Internal Medicine</div>
               </div>
-              <div className="sidebar-avatar" style={{ width: 38, height: 38, fontSize: 14 }}>{initials}</div>
+              <div className="sidebar-avatar" style={{ width: 36, height: 36, fontSize: 13 }}>
+                {initials}
+              </div>
             </div>
           </div>
         </header>
 
-        {/* Page content */}
-        <div className="page-container animate-fade-in">
+        {/* Page Content */}
+        <div className="page-container">
           {children}
         </div>
       </main>
