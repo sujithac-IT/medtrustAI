@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
+import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ConsultationPage from './pages/ConsultationPage'
@@ -39,6 +40,9 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public Root: Interactive Google-Grade Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+
         {/* Public Routes: Login and Patient Waiting Room */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/waiting-room" element={<WaitingRoomPage />} />
@@ -52,7 +56,6 @@ export default function App() {
             <ProtectedRoute>
               <Layout>
                 <Routes>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/consultation" element={<ConsultationPage />} />
                   <Route path="/consultation/:id" element={<ConsultationPage />} />
@@ -63,6 +66,7 @@ export default function App() {
                   <Route path="/case-sheets" element={<CaseSheetsListPage />} />
                   <Route path="/multilingual-summary" element={<MultilingualSummaryPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

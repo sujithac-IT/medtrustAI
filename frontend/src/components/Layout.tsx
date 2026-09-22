@@ -257,6 +257,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="topbar-actions">
+            {/* Quick Meeting Launcher / Home Link */}
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                backgroundColor: '#EFF6FF',
+                color: '#1A73E8',
+                border: '1px solid #BFDBFE',
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title="Go to Public Landing Page & Google Meet Launcher"
+            >
+              <VideoMeetIcon size={15} color="#1A73E8" />
+              <span>Meet Launcher</span>
+            </button>
+
             {/* Google Meet Connected Badge */}
             <div style={{
               display: 'flex',
@@ -269,7 +291,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               fontSize: 12,
             }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
-              <span style={{ fontWeight: 600, color: '#047857' }}>Google Meet • Connected</span>
+              <span style={{ fontWeight: 600, color: '#047857' }}>Google Meet • Active</span>
             </div>
 
             {/* Doctor Profile Header */}

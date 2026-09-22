@@ -188,3 +188,39 @@ export const FhirIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor
     <polyline points="2 12 12 17 22 12" />
   </svg>
 )
+
+// 21. Camera Icon (Hardware Video)
+export const CameraIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', style, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+    <path d="M23 7l-7 5 7 5V7z" />
+    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+  </svg>
+)
+
+// 22. Camera Off Icon
+export const CameraOffIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', style, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+    <line x1="1" y1="1" x2="23" y2="23" />
+    <path d="M21 15.5l2 1.5V7l-7 5 1.5 1.1" />
+    <path d="M1 5a2 2 0 0 1 2-2h1.5" />
+    <path d="M9 3h7a2 2 0 0 1 2 2v10" />
+    <path d="M3 7v12a2 2 0 0 0 2 2h12" />
+  </svg>
+)
+
+// 23. Check Circle Icon
+export const CheckCircleIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', style, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+)
+
+// 24. Clock Icon
+export const ClockIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', style, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+)
+
