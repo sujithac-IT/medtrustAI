@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
-set -e
+# One-command local run: installs deps, builds the SPA, serves API + UI on http://localhost:8000
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+PORT="${PORT:-8000}"
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-cd "$DIR"
+if [ ! -x .venv/bin/python ]; then
+  echo "Creating Python virtualenv (.venv)"
+  python3 -m venv .venv
+fi
+.venv/bin/pip install -q -r backend/requirements.txt
 
-echo "=========================================================="
-echo "🏥 Launching MedTrust AI Clinical Telehealth Platform"
-echo "=========================================================="
-
-if [ -f ".venv/bin/python" ]; then
-    PYTHON_BIN=".venv/bin/python"
-else
-    PYTHON_BIN="python3"
+if [ "${SKIP_FRONTEND_BUILD:-0}" != "1" ]; then
+  echo "Building frontend"
+  (cd frontend && { [ -d node_modules ] || npm ci; } && npm run build)
 fi
 
-echo "Using Python: $($PYTHON_BIN --version)"
-echo "Starting FastAPI server on http://localhost:8000 ..."
-echo "API Documentation: http://localhost:8000/docs"
-echo "Web Application:   http://localhost:8000"
-echo "----------------------------------------------------------"
-
-exec $PYTHON_BIN -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+[ -f .env ] && { set -a; . ./.env; set +a; }
+echo "MedTrust AI -> http://localhost:${PORT}  (API docs: /docs)"
+cd backend
+exec ../.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$PORT"

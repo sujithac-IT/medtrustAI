@@ -1,298 +1,139 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import {
-  VideoMeetIcon,
-  DoctorHostIcon,
-  WaitingRoomIcon,
-  CheckCircleIcon,
-  ShieldCheckIcon,
-} from '../components/MedicalIcons'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { GraduationCap, Stethoscope, UserRound } from 'lucide-react'
+import { api, type AuthConfig } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import type { Role } from '../api/types'
+import { Alert, Spinner } from '../components/ui'
+import { BrandMark } from '../components/Layout'
+import { firebaseClientConfigured, firebaseGoogleIdToken } from '../auth/firebase'
 
 export default function LoginPage() {
-  const { demoLogin } = useAuth()
-  const navigate = useNavigate()
-  const [meetingCode, setMeetingCode] = useState('')
+  const { user, login, demo, register, adopt } = useAuth()
+  const [params] = useSearchParams()
+  const nav = useNavigate()
+  const next = params.get('next') || '/'
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [cfg, setCfg] = useState<AuthConfig | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [f, setF] = useState({ email: '', password: '', name: '', role: 'patient' as Role, invite_code: '', registration_number: '', date_of_birth: '', gender: 'Female', phone: '', remember: true })
 
-  const handleDoctorLogin = (name: string, email: string) => {
-    // Single-click Google Meet Doctor Sign-in
-    const doctorUser = {
-      uid: email.includes('jenkins') ? 'doc-jenkins-02' : 'doc-sharma-01',
-      email,
-      displayName: name,
-      role: 'doctor' as const,
-      specialization: email.includes('jenkins') ? 'Emergency & Internal Medicine' : 'Cardiology & Telemedicine',
-      licenseNumber: email.includes('jenkins') ? 'MCI-91823' : 'MCI-84920',
-      department: email.includes('jenkins') ? 'Internal Medicine' : 'Cardiology',
+  useEffect(() => { api.authConfig().then(setCfg).catch(() => setCfg(null)) }, [])
+  if (user) return <Navigate to={next} replace />
+
+  const set = (k: keyof typeof f, v: string | boolean) => setF((s) => ({ ...s, [k]: v }))
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+      nav(next, { replace: true })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
     }
-    localStorage.setItem('medtrust_demo_user', JSON.stringify(doctorUser))
-    demoLogin('doctor')
-    navigate('/consultation')
   }
-
-  const handlePatientJoin = (e: React.FormEvent) => {
+  const submit = (e: FormEvent) => {
     e.preventDefault()
-    const cleaned = meetingCode.trim().replace(/^https?:\/\/[^/]+\/(waiting-room\/|meet\/)?/, '')
-    if (!cleaned) return
-    navigate(`/waiting-room/${cleaned}`)
+    if (mode === 'login') return run(() => login(f.email, f.password, f.remember))
+    const body: Record<string, unknown> = { email: f.email, password: f.password, name: f.name, role: f.role }
+    if (f.role === 'patient') Object.assign(body, { date_of_birth: f.date_of_birth || null, gender: f.gender, phone: f.phone || null })
+    else Object.assign(body, { invite_code: f.invite_code || null, registration_number: f.registration_number || null })
+    return run(() => register(body))
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#FFFFFF',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px 16px',
-      fontFamily: "'Inter', 'Roboto', -apple-system, sans-serif",
-      color: '#202124',
-    }}>
-      {/* Google Meet Style Login Card */}
-      <div style={{
-        width: '100%',
-        maxWidth: 480,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
-        border: '1px solid #DADCE0',
-        padding: '36px 32px',
-        boxShadow: '0 2px 10px rgba(60,64,67,0.15)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-      }}>
-        {/* Google Meet Header Icon */}
-        <div style={{
-          width: 52,
-          height: 52,
-          borderRadius: 14,
-          background: 'linear-gradient(135deg, #1A73E8 0%, #007A64 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#FFFFFF',
-          marginBottom: 16,
-          boxShadow: '0 2px 8px rgba(26,115,232,0.3)',
-        }}>
-          <VideoMeetIcon size={28} color="#FFFFFF" />
+    <div className="auth">
+      <section className="auth-art">
+        <div className="brand" style={{ padding: 0 }}>
+          <BrandMark />
+          <div><b>MedTrust AI</b><span>Teaching hospital teleconsultation</span></div>
         </div>
-
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#202124', margin: 0, textAlign: 'center' }}>
-          Google Meet Telehealth
-        </h1>
-        <p style={{ fontSize: 13, color: '#5F6368', marginTop: 6, marginBottom: 28, textAlign: 'center' }}>
-          Select your Doctor account to host or enter a meeting code to join as patient
-        </p>
-
-        {/* ─── DOCTOR HOST SINGLE-CLICK SIGN-IN (GOOGLE SSO) ─── */}
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#1A73E8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Doctor Host Accounts (Instant Sign-in)
-          </div>
-
-          {/* Doctor 1: Dr. Rajesh Sharma */}
-          <button
-            onClick={() => handleDoctorLogin('Dr. Rajesh Sharma, MD', 'dr.sharma@medtrust.hospital.org')}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              backgroundColor: '#F8FAFD',
-              border: '1px solid #DADCE0',
-              borderRadius: 12,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              textAlign: 'left',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#E8F0FE'
-              e.currentTarget.style.borderColor = '#1A73E8'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#F8FAFD'
-              e.currentTarget.style.borderColor = '#DADCE0'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                backgroundColor: '#1A73E8',
-                color: '#FFFFFF',
-                fontWeight: 700,
-                fontSize: 14,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                RS
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#202124' }}>
-                  Dr. Rajesh Sharma, MD
-                </div>
-                <div style={{ fontSize: 12, color: '#5F6368' }}>
-                  dr.sharma@medtrust.hospital.org • Host
-                </div>
-              </div>
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1A73E8' }}>Host &rarr;</span>
-          </button>
-
-          {/* Doctor 2: Dr. Sarah Jenkins */}
-          <button
-            onClick={() => handleDoctorLogin('Dr. Sarah Jenkins, MD', 'dr.jenkins@medtrust.hospital.org')}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              backgroundColor: '#F8FAFD',
-              border: '1px solid #DADCE0',
-              borderRadius: 12,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              textAlign: 'left',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#E8F0FE'
-              e.currentTarget.style.borderColor = '#1A73E8'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#F8FAFD'
-              e.currentTarget.style.borderColor = '#DADCE0'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                backgroundColor: '#007A64',
-                color: '#FFFFFF',
-                fontWeight: 700,
-                fontSize: 14,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                SJ
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#202124' }}>
-                  Dr. Sarah Jenkins, MD
-                </div>
-                <div style={{ fontSize: 12, color: '#5F6368' }}>
-                  dr.jenkins@medtrust.hospital.org • Host
-                </div>
-              </div>
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1A73E8' }}>Host &rarr;</span>
-          </button>
+        <svg className="ecg" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 60 H380 L410 60 L430 20 L455 105 L480 8 L505 92 L525 60 H760 L780 60 L795 40 L812 80 L828 60 H1200" fill="none" stroke="#E8833A" strokeWidth="3" />
+        </svg>
+        <h1>Every word of the visit, <em>charted</em> and signed.</h1>
+        <p>Doctors, students and patients meet over secure video. Each voice is transcribed live, and the AI drafts a 17-section case sheet for the attending doctor to review and sign.</p>
+        <div className="auth-steps">
+          <div><b>01 / CONSULT</b>Video room with waiting lobby</div>
+          <div><b>02 / TRANSCRIBE</b>Per-speaker live captions</div>
+          <div><b>03 / SIGN</b>AI draft, doctor approval</div>
         </div>
+      </section>
+      <section className="auth-form">
+        <div className="card reveal">
+          <h2 style={{ marginBottom: 4 }}>{mode === 'login' ? 'Sign in' : 'Create account'}</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>{mode === 'login' ? 'Use your hospital credentials.' : 'Patients can self-register. Staff need an invite code.'}</p>
 
-        {/* Divider */}
-        <div style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          margin: '12px 0 20px 0',
-          color: '#80868B',
-          fontSize: 12,
-        }}>
-          <div style={{ flex: 1, height: 1, backgroundColor: '#E8EAED' }} />
-          <span>OR JOIN AS PATIENT</span>
-          <div style={{ flex: 1, height: 1, backgroundColor: '#E8EAED' }} />
+          {cfg?.demo_mode && mode === 'login' && (
+            <>
+              <div className="demo-grid" style={{ marginTop: 16 }}>
+                {([['doctor', Stethoscope, 'Doctor'], ['student', GraduationCap, 'Student'], ['patient', UserRound, 'Patient']] as const).map(([r, Icon, label]) => (
+                  <button key={r} type="button" disabled={busy} onClick={() => run(() => demo(r))}>
+                    <Icon size={22} /> {label}
+                  </button>
+                ))}
+              </div>
+              <div className="divider">or sign in with email</div>
+            </>
+          )}
+
+          {cfg?.firebase_enabled && firebaseClientConfigured && (
+            <>
+              <button type="button" className="btn ghost" style={{ width: '100%', marginTop: 12 }} disabled={busy}
+                onClick={() => run(async () => adopt(await api.firebase(await firebaseGoogleIdToken(), mode === 'register' ? f.role : 'patient')))}>
+                Continue with Google (Firebase)
+              </button>
+              <div className="divider">or</div>
+            </>
+          )}
+          {error && <div style={{ marginBottom: 12 }}><Alert kind="error">{error}</Alert></div>}
+          <form className="stack" onSubmit={submit}>
+            {mode === 'register' && (
+              <>
+                <div className="field"><label>I am a</label>
+                  <div className="tabs">
+                    {(['patient', 'doctor', 'student'] as Role[]).map((r) => (
+                      <button type="button" key={r} className={f.role === r ? 'on' : ''} onClick={() => set('role', r)}>{r[0].toUpperCase() + r.slice(1)}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field"><label htmlFor="name">Full name</label><input id="name" className="input" required minLength={2} value={f.name} onChange={(e) => set('name', e.target.value)} /></div>
+              </>
+            )}
+            <div className="field"><label htmlFor="email">Email</label><input id="email" className="input" type="email" autoComplete="email" required value={f.email} onChange={(e) => set('email', e.target.value)} /></div>
+            <div className="field"><label htmlFor="pw">Password</label><input id="pw" className="input" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'register' ? 8 : 1} value={f.password} onChange={(e) => set('password', e.target.value)} /></div>
+            {mode === 'register' && f.role === 'patient' && (
+              <div className="grid g2">
+                <div className="field"><label htmlFor="dob">Date of birth</label><input id="dob" className="input" type="date" required max={new Date().toISOString().slice(0, 10)} value={f.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} /></div>
+                <div className="field"><label htmlFor="g">Gender</label><select id="g" className="input" value={f.gender} onChange={(e) => set('gender', e.target.value)}><option>Female</option><option>Male</option><option>Other</option></select></div>
+                <div className="field" style={{ gridColumn: '1 / -1' }}><label htmlFor="ph">Phone</label><input id="ph" className="input" required pattern="\+?[0-9][0-9 \-]{7,16}" value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91 98xxxxxxx" /></div>
+              </div>
+            )}
+            {mode === 'register' && f.role !== 'patient' && (
+              <div className="grid g2">
+                <div className="field"><label htmlFor="inv">Staff invite code</label><input id="inv" className="input" value={f.invite_code} onChange={(e) => set('invite_code', e.target.value)} /></div>
+                <div className="field"><label htmlFor="reg">Registration no.</label><input id="reg" className="input" required={f.role === 'doctor'} value={f.registration_number} onChange={(e) => set('registration_number', e.target.value)} /></div>
+              </div>
+            )}
+            {mode === 'login' && (
+              <label className="row small"><input type="checkbox" checked={f.remember} onChange={(e) => set('remember', e.target.checked)} /> Keep me signed in on this device</label>
+            )}
+            <button className="btn" disabled={busy} type="submit">{busy ? <Spinner light /> : mode === 'login' ? 'Sign in' : 'Create account'}</button>
+          </form>
+          <p className="small muted" style={{ textAlign: 'center', marginBottom: 0 }}>
+            {mode === 'login' ? 'New patient? ' : 'Already registered? '}
+            <a href="#" onClick={(e) => { e.preventDefault(); setMode(mode === 'login' ? 'register' : 'login'); setError(null) }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</a>
+          </p>
+          {cfg?.demo_mode && cfg.demo_accounts && mode === 'login' && (
+            <p className="tiny muted" style={{ textAlign: 'center', marginTop: 14, textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+              Demo password for all accounts: <span className="mono">{cfg.demo_accounts.doctor.password}</span>
+            </p>
+          )}
         </div>
-
-        {/* ─── PATIENT JOIN BY MEETING CODE (NO LOGIN REQUIRED) ─── */}
-        <form onSubmit={handlePatientJoin} style={{ width: '100%' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <span style={{ position: 'absolute', left: 12, top: 11, color: '#5F6368' }}>
-                <WaitingRoomIcon size={18} color="#5F6368" />
-              </span>
-              <input
-                type="text"
-                placeholder="Enter meeting code or link"
-                value={meetingCode}
-                onChange={(e) => setMeetingCode(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px 10px 38px',
-                  borderRadius: 8,
-                  border: '1px solid #DADCE0',
-                  fontSize: 13,
-                  outline: 'none',
-                  color: '#202124',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!meetingCode.trim()}
-              style={{
-                padding: '10px 18px',
-                borderRadius: 8,
-                backgroundColor: meetingCode.trim() ? '#1A73E8' : '#F1F3F4',
-                color: meetingCode.trim() ? '#FFFFFF' : '#9AA0A6',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: meetingCode.trim() ? 'pointer' : 'not-allowed',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Join
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10, fontSize: 11, color: '#5F6368' }}>
-            <span>Sample patient links:</span>
-            <span
-              style={{ color: '#1A73E8', cursor: 'pointer', textDecoration: 'underline' }}
-              onClick={() => setMeetingCode('abc-defg-hij')}
-            >
-              abc-defg-hij
-            </span>
-            <span>•</span>
-            <span
-              style={{ color: '#1A73E8', cursor: 'pointer', textDecoration: 'underline' }}
-              onClick={() => setMeetingCode('dr-sarah-cardiology')}
-            >
-              dr-sarah-cardiology
-            </span>
-          </div>
-        </form>
-
-        {/* Trust Badges */}
-        <div style={{
-          marginTop: 28,
-          paddingTop: 16,
-          borderTop: '1px solid #F1F3F4',
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'space-around',
-          fontSize: 11,
-          color: '#5F6368',
-        }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <CheckCircleIcon size={14} color="#188038" />
-            ABDM Certified (M1/M2/M3)
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <ShieldCheckIcon size={14} color="#1A73E8" />
-            HIPAA Compliant
-          </span>
-        </div>
-      </div>
+      </section>
     </div>
   )
 }

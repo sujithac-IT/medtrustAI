@@ -1,120 +1,309 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import CaseSheetForm from '../components/CaseSheetForm'
-import type { CaseSheet } from '../types'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { BadgeCheck, Eye, History, Languages, Pencil, Plus, Printer, RefreshCw, Save, ShieldCheck, Square, Trash2, Volume2 } from 'lucide-react'
+import { api } from '../api/client'
+import type { CaseSheet, Consultation, Medication, Sections, Symptom, Vitals } from '../api/types'
+import { useAuth } from '../auth/AuthContext'
+import { Alert, Modal, Spinner } from '../components/ui'
+import { BrandMark } from '../components/Layout'
+import { fmtDateTime } from '../lib/format'
 
-const SUNDARAM_SHEET: CaseSheet = {
-  id: 'cs-sundaram',
-  consultationId: 'c_102345',
-  patientId: 'p_sundaram',
-  patientName: 'K. Sundaram',
-  doctorId: 'doc-001',
-  doctorName: 'Dr. Rajesh Sharma, MD',
-  department: 'Cardiology',
-  generatedAt: '2025-04-12T10:30:00Z',
-  isApproved: false,
-  isReadOnly: false,
-  patientInfo: {
-    name: 'K. Sundaram',
-    age: '58',
-    gender: 'Male',
-    bloodGroup: 'B+',
-    phone: '+91 98765 43210',
-    address: 'No. 12, Gandhi Nagar, Madurai',
-    mrn: '102345',
-    dob: '1966-04-12',
-  },
-  chiefComplaint: 'Chest pain',
-  hpi: 'Patient is a 56-year-old male who presents with complaints of chest pain for the past 3 weeks. The pain is exertional and relieved with rest. Associated with exertional shortness of breath and follow-up in 2 weeks.',
-  symptoms: ['Chest pain (moderate)', 'Shortness of breath (mild)'],
-  duration: '3 weeks, gradual onset',
-  pastMedicalHistory: 'Hypertension, Type 2 Diabetes',
-  medications: [
-    { name: 'Aspirin', dosage: '75mg', frequency: 'OD', route: 'Oral', duration: 'Long-term' },
-    { name: 'Atorvastatin', dosage: '20mg', frequency: 'OD', route: 'Oral', duration: 'Long-term' },
-    { name: 'Metformin', dosage: '500mg', frequency: 'BD', route: 'Oral', duration: '3 months' },
-  ],
-  allergies: ['Penicillin', 'Dust'],
-  familyHistory: 'Father - Diabetes',
-  socialHistory: 'Desk job, non-smoker, occasional alcohol',
-  doctorObservations: 'BP: 148/94 mmHg | Pulse: 88 bpm regular | SpO2: 98% on room air | S1, S2 audible, no murmurs',
-  investigations: ['12-lead ECG', 'Serum Cardiac Troponin I', '2D Echocardiogram', 'HbA1c & Fasting Glucose', 'Lipid Profile'],
-  assessment: 'Exertional chest pain — rule out Angina Pectoris / Coronary Artery Disease. Background of Essential Hypertension and Type 2 Diabetes.',
-  treatmentPlan: '1. Continue Aspirin 75mg OD and Atorvastatin 20mg OD.\n2. Continue Metformin 500mg BD.\n3. Complete 12-lead ECG and 2D Echo.\n4. Avoid Penicillin group antibiotics.\n5. Low sodium, diabetic diet with daily light walking.',
-  followUp: 'Review in 2 weeks with ECG and Cardiac Troponin reports.',
-  missingInformation: ['Baseline Lipid profile values', 'Previous year HbA1c trending log'],
-  uncertainInformation: ['Cardiac ischemia vs musculoskeletal chest wall component pending ECG'],
-  summaries: {
-    en: 'Mr. K. Sundaram, 58 years old male, presented with chest pain for the past 3 weeks. He has a history of hypertension and type 2 diabetes. Currently on aspirin, atorvastatin and metformin. Advised further cardiac evaluation and follow-up in 2 weeks.',
-    ta: 'திரு கே. சுந்தரம், 58 வயது ஆண், கடந்த 3 வாரங்களாக மார்பு வலியுடன் வந்துள்ளார். அவருக்கு உயர் இரத்த அழுத்தம் மற்றும் வகை 2 நீரிழிவு நோய் வரலாறு உள்ளது. தற்போது ஆஸ்பிரின், அடோர்வாஸ்டாடின் மற்றும் மெட்ஃபோர்மின் சாப்பிடுகிறார். மேலும் இதய பரிசோதனை மற்றும் 2 வாரங்களில் மறு சோதனை பரிந்துரைக்கப்பட்டது.',
-    hi: 'श्री के. सुंदरम, 58 वर्षीय पुरुष, पिछले 3 हफ्तों से सीने में दर्द के साथ आए। उन्हें उच्च रक्तचाप और टाइप 2 मधुमेह का इतिहास है। वर्तमान में एस्पिरिन, एटोरवास्टेटिन और मेटफॉर्मिन ले रहे हैं। आगे हृदय मूल्यांकन और 2 सप्ताह में अनुवर्ती की सलाह दी गई।',
-    te: 'శ్రీ కె. సుందరం, 58 సంవత్సరాల పురుషుడు, గత 3 వారాలుగా ఛాతీ నొప్పితో వచ్చారు. వారికి హైపర్టెన్షన్ మరియు టైప్ 2 మధుమేహ చరిత్ర ఉంది. ప్రస్తుతం ఆస్పిరిన్, అటోర్వాస్టాటిన్ మరియు మెట్‌ఫార్మిన్ తీసుకుంటున్నారు. మరింత గుండె మూల్యాంకనం మరియు 2 వారాల్లో ఫాలో-అప్ సలహా ఇవ్వబడింది.',
-    ml: 'ശ്രീ കെ. സുന്ദരം, 58 വയസ്സുള്ള പുരുഷൻ, കഴിഞ്ഞ 3 ആഴ്ചയായി നെഞ്ചുവേദനയുമായി വന്നു. അദ്ദേഹത്തിന് ഹൈപ്പർടെൻഷനും ടൈപ്പ് 2 പ്രമേഹവും ഉണ്ട്. ഇപ്പോൾ ആസ്പിരിൻ, അറ്റോർവാസ്റ്റാറ്റിൻ, മെറ്റ്ഫോർമിൻ എന്നിവ കഴിക്കുന്നു. കൂടുതൽ ഹൃദയ പരിശോധനയും 2 ആഴ്ചയ്ക്കുള്ളിൽ ഫോളോ-അപ്പും നിർദ്ദേശിച്ചു.',
-    kn: 'ಶ್ರೀ ಕೆ. ಸುಂದರಂ, 58 ವರ್ಷದ ಪುರುಷ, ಕಳೆದ 3 ವಾರಗಳಿಂದ ಎದೆ ನೋವಿನೊಂದಿಗೆ ಬಂದಿದ್ದಾರೆ. ಅವರಿಗೆ ಅಧಿಕ ರಕ್ತದೊತ್ತಡ ಮತ್ತು ಟೈಪ್ 2 ಮಧುಮೇಹ ಇತಿಹಾಸ ಇದೆ. ಪ್ರಸ್ತುತ ಆಸ್ಪಿರಿನ್, ಅಟೋರ್ವಾಸ್ಟಾಟಿನ್ ಮತ್ತು ಮೆಟ್ಫಾರ್ಮಿನ್ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದ್ದಾರೆ. ಹೆಚ್ಚಿನ ಹೃದಯ ಮೌಲ್ಯಮಾಪನ ಮತ್ತು 2 ವಾರಗಳಲ್ಲಿ ಫಾಲೋ-ಅಪ್ ಸೂಚಿಸಲಾಗಿದೆ.',
-  },
+const LANGS: [string, string, string][] = [
+  ['en', 'English', 'en-IN'], ['ta', 'Tamil', 'ta-IN'], ['hi', 'Hindi', 'hi-IN'],
+  ['te', 'Telugu', 'te-IN'], ['ml', 'Malayalam', 'ml-IN'], ['kn', 'Kannada', 'kn-IN'],
+]
+const VITALS: [keyof Vitals, string][] = [
+  ['blood_pressure', 'BP'], ['pulse', 'Pulse'], ['temperature', 'Temp'], ['spo2', 'SpO2'], ['respiratory_rate', 'RR'], ['weight', 'Weight'],
+]
+const MED_COLS: [keyof Medication, string][] = [['name', 'Drug'], ['dose', 'Dose'], ['frequency', 'Frequency'], ['route', 'Route'], ['duration', 'Duration'], ['instructions', 'Instructions']]
+const SYM_COLS: [keyof Symptom, string][] = [['name', 'Symptom'], ['severity', 'Severity'], ['duration', 'Duration'], ['notes', 'Notes']]
+const PI_LABELS: Record<string, string> = {
+  name: 'Name', mrn: 'MRN', age: 'Age', gender: 'Gender', date_of_birth: 'DOB', blood_group: 'Blood group', phone: 'Phone',
+  consultation_date: 'Consultation date', attending_doctor: 'Attending doctor', doctor_registration: 'Reg. no.', student: 'Student', reason_for_visit: 'Reason for visit',
+}
+const TEXT_KEYS = new Set(['chief_complaint', 'history_of_present_illness', 'duration', 'family_history', 'social_history', 'assessment', 'treatment_plan', 'follow_up'])
+const LIST_KEYS = new Set(['past_medical_history', 'allergies', 'investigations', 'missing_information', 'uncertain_information'])
+
+function None() { return <span className="none">Not documented in the consultation</span> }
+
+function RowTable<T extends object>({ rows, cols, edit, onChange, blank }: {
+  rows: T[]; cols: [keyof T, string][]; edit: boolean; onChange: (r: T[]) => void; blank: T
+}) {
+  if (!edit && !rows.length) return <None />
+  return (
+    <div className="table-wrap">
+      <table className={`table${edit ? ' med-table' : ''}`}>
+        <thead><tr>{cols.map(([, l]) => <th key={l}>{l}</th>)}{edit && <th />}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {cols.map(([k, l]) => (
+                <td key={String(k)}>
+                  {edit ? <input aria-label={l} value={String(r[k] ?? '')} onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />
+                    : String(r[k] ?? '') || <span className="muted">-</span>}
+                </td>
+              ))}
+              {edit && <td><button className="btn ghost icon" style={{ width: 32, height: 32 }} onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label="Remove row"><Trash2 size={14} /></button></td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {edit && <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => onChange([...rows, { ...blank }])}><Plus size={14} /> Add row</button>}
+    </div>
+  )
+}
+
+function ListEdit({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  return <textarea className="input" rows={Math.max(2, value.length + 1)} value={value.join('\n')} placeholder="One item per line"
+    onChange={(e) => onChange(e.target.value.split('\n'))} onBlur={() => onChange(value.map((s) => s.trim()).filter(Boolean))} />
 }
 
 export default function CaseSheetPage() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const { id = '' } = useParams()
   const { user } = useAuth()
-  const [caseSheet, setCaseSheet] = useState<CaseSheet>(SUNDARAM_SHEET)
+  const [sheet, setSheet] = useState<CaseSheet | null>(null)
+  const [consult, setConsult] = useState<Consultation | null>(null)
+  const [draft, setDraft] = useState<Sections | null>(null)
+  const [mode, setMode] = useState<'preview' | 'edit'>('preview')
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [approving, setApproving] = useState(false)
+  const [reviewed, setReviewed] = useState(false)
+  const [lang, setLang] = useState('en')
+  const [speaking, setSpeaking] = useState(false)
+  const [audit, setAudit] = useState<{ at: string; action: string; user_name: string; user_role: string }[] | null>(null)
+  const staff = user?.role !== 'patient'
 
-  useEffect(() => {
-    const targetId = id || 'cs-sundaram'
-    const saved = localStorage.getItem('medtrust_case_sheets')
-    if (saved) {
-      try {
-        const list: CaseSheet[] = JSON.parse(saved)
-        const found = list.find(s => s.id === targetId || s.id === 'cs-sundaram')
-        if (found) {
-          setCaseSheet(found)
-          return
-        }
-      } catch (err) {
-        console.error('Error reading case sheets from localStorage:', err)
-      }
+  const load = useCallback(async () => {
+    try {
+      const s = await api.caseSheet(id)
+      setSheet(s)
+      setDraft(s.sections)
+      api.consultation(s.consultation_id).then(setConsult).catch(() => {})
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     }
-    setCaseSheet(SUNDARAM_SHEET)
   }, [id])
+  useEffect(() => { void load() }, [load])
+  useEffect(() => () => window.speechSynthesis?.cancel(), [])
 
-  const handleUpdate = (updated: CaseSheet) => {
-    setCaseSheet(updated)
-    const saved = localStorage.getItem('medtrust_case_sheets')
-    let list: CaseSheet[] = []
-    if (saved) {
-      try { list = JSON.parse(saved) } catch {}
-    }
-    const idx = list.findIndex(s => s.id === updated.id)
-    if (idx >= 0) {
-      list[idx] = updated
-    } else {
-      list.push(updated)
-    }
-    localStorage.setItem('medtrust_case_sheets', JSON.stringify(list))
+  if (error && !sheet) return <Alert kind="error">{error}</Alert>
+  if (!sheet || !draft) return <Spinner />
+
+  const locked = sheet.status === 'approved'
+  const edit = mode === 'edit' && !locked && staff
+  const dirty = JSON.stringify(draft) !== JSON.stringify(sheet.sections)
+  const set = <K extends keyof Sections>(k: K, v: Sections[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d))
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key); setError(null); setNotice(null)
+    try { await fn() } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(null) }
+  }
+  const save = () => run('save', async () => {
+    const s = await api.updateCaseSheet(sheet.id, sheet.version, draft)
+    setSheet(s); setDraft(s.sections); setNotice('Saved. Version ' + s.version)
+  })
+  const approve = () => run('approve', async () => {
+    const s = await api.approve(sheet.id, sheet.version)
+    setSheet(s); setDraft(s.sections); setApproving(false); setMode('preview'); setNotice('Case sheet approved, signed and locked.')
+  })
+  const speak = () => {
+    const synth = window.speechSynthesis
+    if (!synth) return setError('Voice playback is not supported in this browser.')
+    if (speaking) { synth.cancel(); setSpeaking(false); return }
+    const text = sheet.summaries?.texts?.[lang]
+    if (!text) return
+    const bcp = LANGS.find((l) => l[0] === lang)![2]
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = bcp
+    const voice = synth.getVoices().find((v) => v.lang === bcp) ?? synth.getVoices().find((v) => v.lang.startsWith(lang))
+    if (voice) u.voice = voice
+    else if (lang !== 'en') setNotice(`No ${LANGS.find((l) => l[0] === lang)![1]} voice is installed on this device; playback may use a default voice.`)
+    u.onend = () => setSpeaking(false)
+    u.onerror = () => setSpeaking(false)
+    setSpeaking(true)
+    synth.speak(u)
   }
 
-  const handleApprove = () => {
-    const approved: CaseSheet = {
-      ...caseSheet,
-      isApproved: true,
-      isReadOnly: true,
-      approvedAt: new Date().toISOString(),
-      approvedBy: user?.displayName || 'Dr. Rajesh Sharma, MD',
+  const order = sheet.section_order
+  const titles = sheet.section_titles
+  const pi = draft.patient_info
+
+  const renderSection = (k: keyof Sections) => {
+    if (k === 'patient_info') {
+      return (
+        <div className="sheet-banner" style={{ marginBottom: 0 }}>
+          {Object.keys(PI_LABELS).filter((x) => x in pi).map((x) => (
+            <div key={x}>
+              <span>{PI_LABELS[x]}</span>
+              {edit && (x === 'reason_for_visit' || x === 'blood_group')
+                ? <input className="input" style={{ padding: '4px 6px' }} value={String(pi[x] ?? '')} onChange={(e) => set('patient_info', { ...pi, [x]: e.target.value })} />
+                : <b>{String(pi[x] ?? '') || '-'}</b>}
+            </div>
+          ))}
+        </div>
+      )
     }
-    handleUpdate(approved)
+    if (k === 'symptoms') return <RowTable rows={draft.symptoms} cols={SYM_COLS} edit={edit} onChange={(v) => set('symptoms', v)} blank={{ name: '', severity: '', duration: '', notes: '' }} />
+    if (k === 'medications') return <RowTable rows={draft.medications} cols={MED_COLS} edit={edit} onChange={(v) => set('medications', v)} blank={{ name: '', dose: '', frequency: '', route: '', duration: '', instructions: '' }} />
+    if (k === 'doctor_observations') {
+      const o = draft.doctor_observations
+      return (
+        <>
+          {edit ? <textarea className="input" value={o.summary} onChange={(e) => set('doctor_observations', { ...o, summary: e.target.value })} />
+            : o.summary ? <div className="body">{o.summary}</div> : <None />}
+          <div className="vitals">
+            {VITALS.map(([vk, l]) => (
+              <div key={vk}><span>{l}</span>
+                {edit ? <input className="input" style={{ padding: '3px 6px' }} value={o.vitals[vk] ?? ''} onChange={(e) => set('doctor_observations', { ...o, vitals: { ...o.vitals, [vk]: e.target.value } })} />
+                  : <b>{o.vitals[vk] || '-'}</b>}
+              </div>
+            ))}
+          </div>
+        </>
+      )
+    }
+    if (TEXT_KEYS.has(k)) {
+      const v = draft[k] as string
+      return edit ? <textarea className="input" value={v} onChange={(e) => set(k, e.target.value as never)} /> : v ? <div className="body">{v}</div> : <None />
+    }
+    if (LIST_KEYS.has(k)) {
+      const v = draft[k] as string[]
+      if (edit) return <ListEdit value={v} onChange={(x) => set(k, x as never)} />
+      if (!v.length) return k === 'missing_information' || k === 'uncertain_information' ? <span className="none">None</span> : <None />
+      return k === 'allergies'
+        ? <div className="tags">{v.map((a) => <span className="tag allergy" key={a}>{a}</span>)}</div>
+        : <ul style={{ margin: 0, paddingLeft: 20 }}>{v.map((a, i) => <li key={i}>{a}</li>)}</ul>
+    }
+    return null
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 110px)', display: 'flex', flexDirection: 'column' }}>
-      <CaseSheetForm
-        caseSheet={caseSheet}
-        onUpdate={handleUpdate}
-        onApprove={handleApprove}
-        isDoctor={user?.role === 'doctor'}
-        onBack={() => navigate('/consultation')}
-      />
+    <div className="sheet">
+      <div className="toolbar">
+        <Link to={`/consultations/${sheet.consultation_id}`} className="btn ghost sm">Back to consultation</Link>
+        <div style={{ flex: 1 }} />
+        {staff && !locked && (
+          <div className="tabs">
+            <button className={mode === 'edit' ? 'on' : ''} onClick={() => setMode('edit')}><Pencil size={13} /> Edit</button>
+            <button className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}><Eye size={13} /> Preview</button>
+          </div>
+        )}
+        {staff && !locked && <button className="btn sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? <Spinner light /> : <Save size={14} />} Save</button>}
+        {user?.role === 'doctor' && !locked && (
+          <button className="btn ok sm" disabled={!!busy} onClick={() => { if (dirty) { setError('Save your edits before approving.'); return } setReviewed(false); setApproving(true) }}>
+            <ShieldCheck size={14} /> Review & approve
+          </button>
+        )}
+        <button className="btn ghost sm" onClick={() => window.print()}><Printer size={14} /> Print / PDF</button>
+      </div>
+
+      {error && <div className="no-print" style={{ marginBottom: 12 }}><Alert kind="error" onClose={() => setError(null)}>{error}</Alert></div>}
+      {notice && <div className="no-print" style={{ marginBottom: 12 }}><Alert kind="success" onClose={() => setNotice(null)}>{notice}</Alert></div>}
+      {!locked && <div className="no-print" style={{ marginBottom: 12 }}><Alert kind="warn">
+        AI-generated draft ({sheet.source === 'gemini' ? 'Gemini' : 'local transcript extractor'}). Not valid for clinical use until reviewed and approved by the attending doctor.
+        {user?.role === 'student' && ' Students can edit the draft; only a doctor can approve.'}
+      </Alert></div>}
+
+      <article className={`sheet-paper${edit ? ' sheet-edit' : ''}`}>
+        <header className="sheet-head">
+          <div className="row" style={{ gap: 14 }}>
+            <BrandMark />
+            <div>
+              <div className="hosp">MedTrust University Teaching Hospital</div>
+              <div className="tiny muted">Teleconsultation case sheet</div>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            {locked ? <span className="stamp"><BadgeCheck size={18} />APPROVED</span> : <span className="badge warn">DRAFT v{sheet.version}</span>}
+            <div className="muted small mono" style={{ marginTop: 6 }}>{sheet.id}</div>
+            {consult && <div className="muted small">{fmtDateTime(consult.started_at ?? consult.scheduled_at)}</div>}
+          </div>
+        </header>
+
+        {order.map((k, i) => {
+          const flag = k === 'missing_information' && draft.missing_information.length ? ' flag-missing'
+            : k === 'uncertain_information' && draft.uncertain_information.length ? ' flag-uncertain' : ''
+          return (
+            <section key={k} className={`sec${flag}`}>
+              <div className="sec-title"><span className="num">{String(i + 1).padStart(2, '0')}</span><h3>{titles[k]}</h3></div>
+              {renderSection(k)}
+            </section>
+          )
+        })}
+
+        <div className="sign">
+          <div>
+            <div style={{ minHeight: 40 }}>{consult?.student_name ?? ''}</div>
+            <div className="line">Prepared with / student</div>
+          </div>
+          <div>
+            <div style={{ minHeight: 40, fontFamily: 'var(--serif)', fontSize: 18 }}>
+              {locked && sheet.approval ? sheet.approval.approved_by.name : ''}
+            </div>
+            <div className="line">
+              Attending doctor{locked && sheet.approval ? ` - Reg. ${sheet.approval.approved_by.registration_number ?? '-'} - signed ${fmtDateTime(sheet.approval.approved_at)}` : ' (signature pending)'}
+            </div>
+          </div>
+        </div>
+        {locked && sheet.approval && (
+          <p className="muted small mono" style={{ marginTop: 14, wordBreak: 'break-all' }}>
+            Electronically signed. SHA-256 {sheet.approval.content_hash}. "{sheet.approval.statement}"
+          </p>
+        )}
+      </article>
+
+      <section className="card card-pad stack no-print" style={{ marginTop: 18 }}>
+        <div className="row spread wrap">
+          <div className="row"><Languages size={18} /><h3>Patient summary</h3>
+            {sheet.summaries?.source && <span className="badge neutral">{sheet.summaries.machine_translated ? 'AI translated - verify with the patient' : 'Template - clinical details in English'}</span>}</div>
+          {staff && !locked && <button className="btn ghost sm" disabled={!!busy} onClick={() => run('sum', async () => { const sm = await api.refreshSummaries(sheet.id); setSheet({ ...sheet, summaries: sm }) })}>
+            {busy === 'sum' ? <Spinner /> : <RefreshCw size={14} />} Refresh from latest edits</button>}
+        </div>
+        <div className="row wrap">
+          {LANGS.map(([code, label]) => <button key={code} className={`lang-btn${lang === code ? ' on' : ''}`} onClick={() => { window.speechSynthesis?.cancel(); setSpeaking(false); setLang(code) }}>{label}</button>)}
+        </div>
+        <div className="body" style={{ whiteSpace: 'pre-wrap', background: 'var(--paper-2)', borderRadius: 10, padding: 14, border: '1px solid var(--line)' }}>
+          {sheet.summaries?.texts?.[lang] || 'Summary not available.'}
+        </div>
+        <div><button className="btn sm" onClick={speak} disabled={!sheet.summaries?.texts?.[lang]}>{speaking ? <Square size={14} /> : <Volume2 size={14} />} {speaking ? 'Stop' : 'Play voice'}</button></div>
+      </section>
+
+      {staff && (
+        <section className="card card-pad stack no-print" style={{ marginTop: 18 }}>
+          <div className="row spread"><div className="row"><History size={18} /><h3>Audit trail</h3></div>
+            {!audit && <button className="btn ghost sm" onClick={() => api.audit(sheet.id).then(setAudit).catch((e) => setError(e.message))}>Show</button>}</div>
+          {audit && (audit.length === 0 ? <span className="muted small">No events.</span> : (
+            <table className="table"><tbody>
+              {audit.map((a, i) => <tr key={i}><td className="small mono">{fmtDateTime(a.at)}</td><td><b>{a.action}</b></td><td className="small">{a.user_name} ({a.user_role})</td></tr>)}
+            </tbody></table>
+          ))}
+        </section>
+      )}
+
+      {approving && user && (
+        <Modal title="Clinical verification" onClose={() => setApproving(false)} footer={
+          <>
+            <button className="btn ghost" onClick={() => setApproving(false)}>Cancel</button>
+            <button className="btn ok" disabled={!reviewed || busy === 'approve'} onClick={approve}>{busy === 'approve' ? <Spinner light /> : <ShieldCheck size={16} />} Approve & sign</button>
+          </>
+        }>
+          <div className="stack">
+            <div className="card card-pad" style={{ background: 'var(--paper-2)' }}>
+              <div className="tiny muted">Signing as</div>
+              <b style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>{user.name}</b>
+              <div className="small">{user.designation ?? 'Attending physician'}{user.specialization ? ` - ${user.specialization}` : ''}</div>
+              <div className="small mono">Registration {user.registration_number ?? '-'}</div>
+            </div>
+            {draft.missing_information.length > 0 && <Alert kind="warn">{draft.missing_information.length} item(s) are listed as missing information. Confirm they are acceptable before signing.</Alert>}
+            {draft.uncertain_information.length > 0 && <Alert kind="warn">{draft.uncertain_information.length} item(s) are flagged as uncertain.</Alert>}
+            <label className="row" style={{ alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} style={{ marginTop: 4 }} />
+              <span>I have reviewed every section of this AI-assisted case sheet (version {sheet.version}) against the consultation and confirm it is clinically accurate. After approval the record becomes read-only.</span>
+            </label>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

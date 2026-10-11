@@ -1,114 +1,86 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import List, Optional
-from datetime import datetime
-from app.models.schemas import Patient, PatientCreate
+import json
+import sqlite3
 
-router = APIRouter(prefix="/patients", tags=["Patients"])
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-# In-memory store seeded with initial demo patients
-_PATIENTS_DB: List[Patient] = [
-    Patient(
-        id="p1",
-        name="Arjun Krishnamurthy",
-        dob="1985-06-15",
-        age=39,
-        gender="male",
-        phone="+91 98765 43210",
-        bloodGroup="B+",
-        allergies=["Penicillin"],
-        conditions=["Hypertension"],
-        createdAt="2024-01-10T10:00:00Z",
-        updatedAt="2024-09-20T10:00:00Z",
-    ),
-    Patient(
-        id="p2",
-        name="Priya Sundaram",
-        dob="1992-03-22",
-        age=32,
-        gender="female",
-        phone="+91 87654 32109",
-        bloodGroup="O+",
-        allergies=[],
-        conditions=["Type 2 Diabetes"],
-        createdAt="2024-02-15T11:00:00Z",
-        updatedAt="2024-09-18T12:00:00Z",
-    ),
-    Patient(
-        id="p3",
-        name="Ravi Shankar",
-        dob="1970-11-08",
-        age=54,
-        gender="male",
-        phone="+91 76543 21098",
-        bloodGroup="A+",
-        allergies=["Sulfa"],
-        conditions=["COPD", "Hypertension"],
-        createdAt="2024-03-01T09:00:00Z",
-        updatedAt="2024-09-15T15:00:00Z",
-    ),
-    Patient(
-        id="p4",
-        name="Meena Devi",
-        dob="1998-07-30",
-        age=26,
-        gender="female",
-        phone="+91 65432 10987",
-        bloodGroup="AB-",
-        allergies=[],
-        conditions=[],
-        createdAt="2024-04-20T14:00:00Z",
-        updatedAt="2024-09-10T16:00:00Z",
-    ),
-]
+from ..db import audit, many, new_id, next_mrn, now_iso, one, tx
+from ..schemas import PatientIn, PatientPatch
+from ..security import current_user, staff_only
+from ..serializers import CONSULT_SQL, consultation_out, ensure_patient_access, patient_out
 
-def calculate_age(dob: str) -> int:
+router = APIRouter(prefix="/api/patients", tags=["patients"])
+
+
+@router.get("")
+def list_patients(q: str | None = Query(None, max_length=80), user: dict = Depends(staff_only)):
+    if q:
+        like = f"%{q.strip()}%"
+        rows = many("""SELECT * FROM patients WHERE first_name || ' ' || last_name LIKE ? OR mrn LIKE ?
+                       OR phone LIKE ? OR email LIKE ? ORDER BY updated_at DESC""", (like, like, like, like))
+    else:
+        rows = many("SELECT * FROM patients ORDER BY updated_at DESC")
+    return [patient_out(r) for r in rows]
+
+
+@router.post("", status_code=201)
+def create_patient(body: PatientIn, user: dict = Depends(staff_only)):
+    pid = new_id("pat")
+    ts = now_iso()
     try:
-        birth = datetime.strptime(dob, "%Y-%m-%d")
-        today = datetime.utcnow()
-        return today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
-    except Exception:
-        return 0
+        with tx() as c:
+            mrn = next_mrn(c)
+            c.execute("""INSERT INTO patients (id,mrn,first_name,last_name,date_of_birth,gender,blood_group,phone,email,
+                         address,emergency_contact_name,emergency_contact_phone,allergies_json,conditions_json,
+                         created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (pid, mrn, body.first_name.strip(), body.last_name.strip(), body.date_of_birth.isoformat(),
+                       body.gender, body.blood_group, body.phone, body.email, body.address,
+                       body.emergency_contact_name, body.emergency_contact_phone, json.dumps(body.allergies),
+                       json.dumps(body.conditions), user["id"], ts, ts))
+            audit(c, user["id"], "create", "patient", pid)
+    except sqlite3.IntegrityError as e:
+        raise HTTPException(409, f"Could not create patient: {e}")
+    return patient_out(one("SELECT * FROM patients WHERE id=?", (pid,)))  # type: ignore[arg-type]
 
-@router.get("", response_model=List[Patient])
-def get_patients(search: Optional[str] = Query(None)):
-    """List all patients with optional search query filtering by name, phone, or conditions."""
-    if not search:
-        return _PATIENTS_DB
-    q = search.lower()
-    return [
-        p for p in _PATIENTS_DB
-        if q in p.name.lower() or q in p.phone or any(q in c.lower() for c in p.conditions)
-    ]
 
-@router.get("/{patient_id}", response_model=Patient)
-def get_patient(patient_id: str):
-    """Get single patient details by ID."""
-    for p in _PATIENTS_DB:
-        if p.id == patient_id:
-            return p
-    raise HTTPException(status_code=404, detail="Patient not found")
+@router.get("/{pid}")
+def get_patient(pid: str, user: dict = Depends(current_user)):
+    ensure_patient_access(user, pid)
+    p = one("SELECT * FROM patients WHERE id=?", (pid,))
+    if not p:
+        raise HTTPException(404, "Patient not found")
+    return patient_out(p)
 
-@router.post("", response_model=Patient, status_code=201)
-def create_patient(payload: PatientCreate):
-    """Register a new patient into the hospital directory."""
-    now = datetime.utcnow().isoformat() + "Z"
-    new_id = f"p_{int(datetime.utcnow().timestamp())}"
-    age = calculate_age(payload.dob)
-    patient = Patient(
-        id=new_id,
-        name=payload.name,
-        dob=payload.dob,
-        age=age,
-        gender=payload.gender,
-        phone=payload.phone,
-        email=payload.email,
-        bloodGroup=payload.bloodGroup,
-        address=payload.address,
-        allergies=payload.allergies,
-        conditions=payload.conditions,
-        emergencyContact=payload.emergencyContact,
-        createdAt=now,
-        updatedAt=now,
-    )
-    _PATIENTS_DB.append(patient)
-    return patient
+
+@router.patch("/{pid}")
+def update_patient(pid: str, body: PatientPatch, user: dict = Depends(staff_only)):
+    if not one("SELECT id FROM patients WHERE id=?", (pid,)):
+        raise HTTPException(404, "Patient not found")
+    data = body.model_dump(exclude_unset=True)
+    cols, vals = [], []
+    for k, v in data.items():
+        if k in ("allergies", "conditions"):
+            cols.append(f"{k}_json=?")
+            vals.append(json.dumps([t.strip() for t in (v or []) if t.strip()]))
+        else:
+            cols.append(f"{k}=?")
+            vals.append(v)
+    if cols:
+        with tx() as c:
+            c.execute(f"UPDATE patients SET {', '.join(cols)}, updated_at=? WHERE id=?", (*vals, now_iso(), pid))
+            audit(c, user["id"], "update", "patient", pid, {"fields": list(data)})
+    return patient_out(one("SELECT * FROM patients WHERE id=?", (pid,)))  # type: ignore[arg-type]
+
+
+@router.get("/{pid}/history")
+def patient_history(pid: str, user: dict = Depends(current_user)):
+    ensure_patient_access(user, pid)
+    p = one("SELECT * FROM patients WHERE id=?", (pid,))
+    if not p:
+        raise HTTPException(404, "Patient not found")
+    rows = many(CONSULT_SQL + " WHERE c.patient_id=? ORDER BY c.scheduled_at DESC", (pid,))
+    items = [consultation_out(r) for r in rows]
+    if user["role"] == "patient":
+        for i in items:
+            if i["case_sheet_status"] != "approved":
+                i["case_sheet_id"] = None
+    return {"patient": patient_out(p), "consultations": items}

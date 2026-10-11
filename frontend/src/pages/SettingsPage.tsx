@@ -1,135 +1,49 @@
-import React, { useState } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useEffect, useState } from 'react'
+import { CheckCircle2, CircleSlash } from 'lucide-react'
+import { api } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { Avatar, RoleBadge, Spinner } from '../components/ui'
+import { speechSupported } from '../rtc/useSpeech'
+
+type Health = Awaited<ReturnType<typeof api.health>>
 
 export default function SettingsPage() {
   const { user } = useAuth()
-  const [notifications, setNotifications] = useState(true)
-  const [darkMode, setDarkMode] = useState(true)
-  const [autoGenerate, setAutoGenerate] = useState(true)
-  const [defaultLang, setDefaultLang] = useState('en')
-  const [saved, setSaved] = useState(false)
+  const [h, setH] = useState<Health | null>(null)
+  useEffect(() => { api.health().then(setH).catch(() => {}) }, [])
+  if (!user) return null
 
-  const save = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  const flags: [string, boolean | undefined, string][] = [
+    ['Gemini AI extraction', h?.gemini, 'Set GEMINI_API_KEY. Without it, a grounded local extractor drafts the sheet and reports gaps.'],
+    ['Google Meet + Calendar', h?.google_meet, 'Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN (scopes: calendar.events, meetings.space.created, meetings.space.readonly).'],
+    ['Firebase sign-in', h?.firebase, 'Set FIREBASE_PROJECT_ID on the server and VITE_FIREBASE_* in the frontend build.'],
+    ['TURN relay', h?.turn, 'Set TURN_URL / TURN_USERNAME / TURN_CREDENTIAL so video works across strict NATs and hospital firewalls.'],
+    ['Demo mode', h?.demo_mode, 'DEMO_MODE=false disables one-click demo accounts in production.'],
+    ['Browser speech recognition', speechSupported, 'Live transcription uses the Web Speech API (Chrome / Edge).'],
+  ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 720 }}>
-      <div>
-        <h1 className="section-title">⚙️ Settings</h1>
-        <p className="section-subtitle">Configure your MedTrust AI clinical workspace preferences</p>
-      </div>
-
-      {/* Profile */}
-      <div className="card">
-        <div className="card-title" style={{ marginBottom: 16 }}><span>👤</span> Profile</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          <div className="sidebar-avatar" style={{ width: 56, height: 56, fontSize: 20 }}>
-            {user?.displayName?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'DR'}
+    <div className="stack reveal" style={{ gap: 18, maxWidth: 860 }}>
+      <div className="page-head"><div><h1>Settings</h1><p>Profile and system capabilities.</p></div></div>
+      <section className="card card-pad row" style={{ gap: 18 }}>
+        <Avatar name={user.name} size="lg" />
+        <div className="stack" style={{ gap: 4 }}>
+          <h2>{user.name}</h2>
+          <div className="row"><RoleBadge role={user.role} /><span className="muted small">{user.email}</span></div>
+          {user.registration_number && <span className="small mono">Registration {user.registration_number}</span>}
+          {(user.designation || user.specialization) && <span className="small">{[user.designation, user.specialization].filter(Boolean).join(' - ')}</span>}
+        </div>
+      </section>
+      <section className="card">
+        <div className="card-head"><h2>Integrations</h2>{h ? <span className="badge ok">Server {h.status}</span> : <Spinner />}</div>
+        {flags.map(([name, on, hint]) => (
+          <div className="list-item" key={name} style={{ alignItems: 'flex-start' }}>
+            {on ? <CheckCircle2 size={18} color="var(--ok)" /> : <CircleSlash size={18} color="var(--ink-soft)" />}
+            <div style={{ flex: 1 }}><b>{name}</b><div className="muted small">{hint}</div></div>
+            <span className={`badge ${on ? 'ok' : 'neutral'}`}>{on ? 'Enabled' : 'Off'}</span>
           </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)' }}>{user?.displayName}</div>
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{user?.email} · {user?.role === 'doctor' ? 'Senior Doctor · MD' : 'Patient'}</div>
-            <span className="badge badge-teal" style={{ marginTop: 6 }}>Demo Mode Active</span>
-          </div>
-        </div>
-        <div className="grid grid-2" style={{ gap: 12 }}>
-          <div className="form-group">
-            <label className="form-label">Display Name</label>
-            <input className="form-input" defaultValue={user?.displayName || ''} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Specialization</label>
-            <input className="form-input" defaultValue="Internal Medicine" />
-          </div>
-        </div>
-      </div>
-
-      {/* App preferences */}
-      <div className="card">
-        <div className="card-title" style={{ marginBottom: 16 }}><span>🎛️</span> App Preferences</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[
-            { label: 'Push Notifications', desc: 'Receive alerts for new consultations and approvals', val: notifications, set: setNotifications },
-            { label: 'Dark Mode', desc: 'Use dark glassmorphism theme (recommended)', val: darkMode, set: setDarkMode },
-            { label: 'Auto-Generate Case Sheet', desc: 'Automatically trigger AI generation when recording ends', val: autoGenerate, set: setAutoGenerate },
-          ].map(pref => (
-            <div key={pref.label} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '12px 14px',
-              background: 'var(--color-bg-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
-            }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>{pref.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{pref.desc}</div>
-              </div>
-              <button
-                onClick={() => pref.set(!pref.val)}
-                style={{
-                  width: 44, height: 24, borderRadius: 12,
-                  background: pref.val ? 'var(--color-teal)' : 'var(--color-border)',
-                  border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s',
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 2, left: pref.val ? 22 : 2,
-                  width: 20, height: 20, borderRadius: '50%', background: 'white',
-                  transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                }} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Language */}
-      <div className="card">
-        <div className="card-title" style={{ marginBottom: 12 }}><span>🌐</span> Language & Regional</div>
-        <div className="form-group">
-          <label className="form-label">Default Summary Language</label>
-          <select className="form-select" value={defaultLang} onChange={e => setDefaultLang(e.target.value)}>
-            <option value="en">🇬🇧 English</option>
-            <option value="ta">🇮🇳 Tamil (தமிழ்)</option>
-            <option value="hi">🇮🇳 Hindi (हिन्दी)</option>
-            <option value="te">🇮🇳 Telugu (తెలుగు)</option>
-            <option value="ml">🇮🇳 Malayalam (മലയാളം)</option>
-            <option value="kn">🇮🇳 Kannada (ಕನ್ನಡ)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* API / Integrations */}
-      <div className="card">
-        <div className="card-title" style={{ marginBottom: 12 }}><span>🔗</span> API Integrations</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            { name: 'Google Gemini AI', status: 'Demo / Local NLP Fallback', color: 'amber' },
-            { name: 'Firebase Authentication', status: 'Demo Mode', color: 'amber' },
-            { name: 'Google Meet', status: 'WebRTC Demo Mode', color: 'amber' },
-            { name: 'Cloud Run Backend', status: 'Not configured', color: 'muted' },
-          ].map(api => (
-            <div key={api.name} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 14px', background: 'var(--color-bg-glass)',
-              borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{api.name}</span>
-              <span className={`badge badge-${api.color}`}>{api.status}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Save */}
-      <button
-        className="btn btn-primary"
-        style={{ alignSelf: 'flex-start', minWidth: 140, padding: '12px 24px' }}
-        onClick={save}
-      >
-        {saved ? '✅ Saved!' : '💾 Save Settings'}
-      </button>
+        ))}
+      </section>
     </div>
   )
 }

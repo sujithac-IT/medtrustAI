@@ -1,0 +1,81 @@
+"""In-process WebSocket hub: presence, waiting room, WebRTC signalling relay, live transcript fan-out.
+
+Single-instance by design (see PRD section 6); swap `Hub` for a Redis pub/sub implementation to scale out.
+"""
+import asyncio
+import uuid
+from dataclasses import dataclass, field
+from typing import Any
+
+from fastapi import WebSocket
+
+
+@dataclass
+class Peer:
+    peer_id: str
+    ws: WebSocket
+    user: dict[str, Any]
+    admitted: bool
+    media: dict[str, bool] = field(default_factory=lambda: {"audio": True, "video": True, "screen": False})
+
+    def public(self) -> dict[str, Any]:
+        return {"peer_id": self.peer_id, "user_id": self.user["id"], "name": self.user["name"],
+                "role": self.user["role"], "admitted": self.admitted, "media": self.media}
+
+
+class Room:
+    def __init__(self, cid: str) -> None:
+        self.cid = cid
+        self.peers: dict[str, Peer] = {}
+        self.lock = asyncio.Lock()
+
+    def admitted(self) -> list[Peer]:
+        return [p for p in self.peers.values() if p.admitted]
+
+    async def send(self, peer: Peer, msg: dict[str, Any]) -> None:
+        try:
+            await peer.ws.send_json(msg)
+        except Exception:
+            pass
+
+    async def broadcast(self, msg: dict[str, Any], *, admitted_only: bool = True, exclude: str | None = None) -> None:
+        targets = [p for p in self.peers.values() if (p.admitted or not admitted_only) and p.peer_id != exclude]
+        await asyncio.gather(*(self.send(p, msg) for p in targets))
+
+    async def roster(self) -> None:
+        await self.broadcast({"type": "roster", "peers": [p.public() for p in self.peers.values()]},
+                             admitted_only=False)
+
+
+class Hub:
+    def __init__(self) -> None:
+        self.rooms: dict[str, Room] = {}
+        # Doctor-level dashboards subscribe here to see waiting-room activity.
+        self.watchers: set[WebSocket] = set()
+
+    def room(self, cid: str) -> Room:
+        return self.rooms.setdefault(cid, Room(cid))
+
+    def new_peer_id(self) -> str:
+        return uuid.uuid4().hex[:10]
+
+    async def to_consultation(self, cid: str, msg: dict[str, Any]) -> None:
+        if cid in self.rooms:
+            await self.rooms[cid].broadcast(msg)
+
+    async def notify_watchers(self, msg: dict[str, Any]) -> None:
+        dead = []
+        for ws in list(self.watchers):
+            try:
+                await ws.send_json(msg)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.watchers.discard(ws)
+
+    def live_summary(self) -> dict[str, Any]:
+        return {cid: {"admitted": len(r.admitted()), "waiting": len(r.peers) - len(r.admitted())}
+                for cid, r in self.rooms.items() if r.peers}
+
+
+hub = Hub()

@@ -1,78 +1,45 @@
-import React from 'react'
-import { Routes, Route, Navigate, useParams } from 'react-router-dom'
-import { AuthProvider, useAuth } from './context/AuthContext'
+import type { ReactNode } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useAuth } from './auth/AuthContext'
+import type { Role } from './api/types'
 import Layout from './components/Layout'
-import LandingPage from './pages/LandingPage'
+import { FullPageSpinner } from './components/ui'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
-import ConsultationPage from './pages/ConsultationPage'
 import PatientsPage from './pages/PatientsPage'
-import HistoryPage from './pages/HistoryPage'
+import PatientDetailPage from './pages/PatientDetailPage'
+import ConsultationsPage from './pages/ConsultationsPage'
+import ConsultationDetailPage from './pages/ConsultationDetailPage'
+import RoomPage from './pages/RoomPage'
 import CaseSheetPage from './pages/CaseSheetPage'
-import CaseSheetsListPage from './pages/CaseSheetsListPage'
-import MultilingualSummaryPage from './pages/MultilingualSummaryPage'
+import CaseSheetsPage from './pages/CaseSheetsPage'
 import SettingsPage from './pages/SettingsPage'
-import WaitingRoomPage from './pages/WaitingRoomPage'
 
-function Spinner() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', flexDirection: 'column', gap: 16 }}>
-      <div style={{ width: 44, height: 44, border: '3px solid rgba(11,87,208,0.2)', borderTop: '3px solid #0B57D0', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-      <p style={{ color: '#64748B', fontSize: 13, fontWeight: 500 }}>Connecting to MedTrust Telehealth...</p>
-    </div>
-  )
-}
-
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function Protected({ roles, children, bare }: { roles?: Role[]; children: ReactNode; bare?: boolean }) {
   const { user, loading } = useAuth()
-  if (loading) return <Spinner />
-  if (!user) return <Navigate to="/login" replace />
-  return <>{children}</>
+  const loc = useLocation()
+  if (loading) return <FullPageSpinner label="Restoring session" />
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />
+  return bare ? <>{children}</> : <Layout>{children}</Layout>
 }
 
-// Redirect helper for direct Google Meet-style links e.g. /meet/abc-defg-hij
-function MeetLinkRedirect() {
-  const { code } = useParams<{ code?: string }>()
-  return <Navigate to={`/waiting-room/${code || 'abc-defg-hij'}`} replace />
-}
+const STAFF: Role[] = ['doctor', 'student']
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        {/* Public Root: Interactive Google-Grade Landing Page */}
-        <Route path="/" element={<LandingPage />} />
-
-        {/* Public Routes: Login and Patient Waiting Room */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/waiting-room" element={<WaitingRoomPage />} />
-        <Route path="/waiting-room/:code" element={<WaitingRoomPage />} />
-        <Route path="/meet/:code" element={<MeetLinkRedirect />} />
-
-        {/* Doctor & Clinical Staff Protected Routes */}
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/consultation" element={<ConsultationPage />} />
-                  <Route path="/consultation/:id" element={<ConsultationPage />} />
-                  <Route path="/patients" element={<PatientsPage />} />
-                  <Route path="/history" element={<HistoryPage />} />
-                  <Route path="/history/:patientId" element={<HistoryPage />} />
-                  <Route path="/case-sheet/:id" element={<CaseSheetPage />} />
-                  <Route path="/case-sheets" element={<CaseSheetsListPage />} />
-                  <Route path="/multilingual-summary" element={<MultilingualSummaryPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </AuthProvider>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/room/:code" element={<Protected bare><RoomPage /></Protected>} />
+      <Route path="/" element={<Protected><DashboardPage /></Protected>} />
+      <Route path="/patients" element={<Protected roles={STAFF}><PatientsPage /></Protected>} />
+      <Route path="/patients/:id" element={<Protected><PatientDetailPage /></Protected>} />
+      <Route path="/consultations" element={<Protected><ConsultationsPage /></Protected>} />
+      <Route path="/consultations/:id" element={<Protected><ConsultationDetailPage /></Protected>} />
+      <Route path="/case-sheets" element={<Protected><CaseSheetsPage /></Protected>} />
+      <Route path="/case-sheets/:id" element={<Protected><CaseSheetPage /></Protected>} />
+      <Route path="/settings" element={<Protected><SettingsPage /></Protected>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }

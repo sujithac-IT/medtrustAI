@@ -1,111 +1,64 @@
-import React, { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
-interface AudioWaveformProps {
-  isActive: boolean
-  color?: string
-  barCount?: number
-  height?: number
-}
-
-export default function AudioWaveform({ isActive, color = '#00D4AA', barCount = 32, height = 48 }: AudioWaveformProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const animFrameRef = useRef<number | undefined>(undefined)
-  const barsRef = useRef<number[]>(Array(barCount).fill(0))
-  // Cache the canvas width so we don't read offsetWidth inside the rAF loop
-  // (reading offsetWidth inside rAF forces a layout recalculation every frame)
-  const canvasWidthRef = useRef<number>(0)
+/** Live audio level bars from a MediaStream via WebAudio AnalyserNode. */
+export default function AudioWaveform({ stream, bars = 5, color = '#E8833A', height = 18, onLevel }: {
+  stream: MediaStream | null; bars?: number; color?: string; height?: number; onLevel?: (level: number) => void
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const levelCb = useRef(onLevel)
+  levelCb.current = onLevel
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-
-    // --- One-time size sync + ResizeObserver so we only recalc on actual resize ---
-    const syncSize = () => {
-      const w = canvas.offsetWidth
-      if (w !== canvasWidthRef.current) {
-        canvasWidthRef.current = w
-        // Writing canvas.width flushes the raster buffer; do it only when truly needed
-        canvas.width = w
-        canvas.height = height
+    const track = stream?.getAudioTracks()[0]
+    if (!stream || !track || !canvas.current) return
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new AC()
+    const src = ctx.createMediaStreamSource(new MediaStream([track]))
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.75
+    src.connect(analyser)
+    const data = new Uint8Array(analyser.frequencyBinCount)
+    const c = canvas.current
+    const g = c.getContext('2d')!
+    const dpr = window.devicePixelRatio || 1
+    const w = bars * 6
+    c.width = w * dpr
+    c.height = height * dpr
+    c.style.width = `${w}px`
+    c.style.height = `${height}px`
+    g.scale(dpr, dpr)
+    let raf = 0
+    let lastReport = 0
+    const draw = (t: number) => {
+      analyser.getByteFrequencyData(data)
+      g.clearRect(0, 0, w, height)
+      const step = Math.floor(data.length / 2 / bars)
+      let total = 0
+      for (let i = 0; i < bars; i++) {
+        let sum = 0
+        for (let j = 0; j < step; j++) sum += data[i * step + j]
+        const v = sum / step / 255
+        total += v
+        const bh = Math.max(3, v * height * 1.6)
+        g.fillStyle = track.enabled ? color : '#6b7f82'
+        g.beginPath()
+        g.roundRect(i * 6 + 1, (height - Math.min(bh, height)) / 2, 4, Math.min(bh, height), 2)
+        g.fill()
       }
-    }
-
-    syncSize()
-
-    const ro = new ResizeObserver(syncSize)
-    ro.observe(canvas)
-
-    // --- Animation loop: never reads offsetWidth, uses cached value ---
-    const animate = () => {
-      const w = canvasWidthRef.current
-      if (w === 0) {
-        animFrameRef.current = requestAnimationFrame(animate)
-        return
+      if (t - lastReport > 200) {
+        levelCb.current?.(track.enabled ? total / bars : 0)
+        lastReport = t
       }
-
-      ctx.clearRect(0, 0, w, height)
-
-      const barWidth = (w / barCount) * 0.6
-      const gap = w / barCount
-
-      barsRef.current = barsRef.current.map((prev, i) => {
-        if (!isActive) {
-          return prev * 0.85 // smooth decay to zero
-        }
-        // Simulate realistic audio levels with a sinusoidal rhythm
-        const target = Math.random() * 0.8 + 0.1 + Math.sin(Date.now() / 200 + i * 0.5) * 0.15
-        return prev * 0.7 + target * 0.3
-      })
-
-      barsRef.current.forEach((level, i) => {
-        const barH = level * height * 0.9
-        const x = i * gap + gap / 2 - barWidth / 2
-        const y = (height - barH) / 2
-
-        const gradient = ctx.createLinearGradient(0, y, 0, y + barH)
-        if (isActive) {
-          // Multi-color neon spectrum across the visualizer width
-          const hueRatio = i / barCount
-          if (hueRatio < 0.33) {
-            gradient.addColorStop(0, '#00E5FF')  // Neon Cyan
-            gradient.addColorStop(0.6, '#00D4AA') // Teal
-            gradient.addColorStop(1, '#059669')   // Emerald
-          } else if (hueRatio < 0.66) {
-            gradient.addColorStop(0, '#A855F7')   // Bright Purple
-            gradient.addColorStop(0.5, '#6366F1') // Indigo
-            gradient.addColorStop(1, '#3B82F6')   // Blue
-          } else {
-            gradient.addColorStop(0, '#EC4899')   // Pink
-            gradient.addColorStop(0.5, '#8B5CF6') // Violet
-            gradient.addColorStop(1, '#00D4AA')   // Cyan
-          }
-        } else {
-          gradient.addColorStop(0, '#334155')
-          gradient.addColorStop(1, '#1e293b')
-        }
-
-        ctx.fillStyle = gradient
-        ctx.beginPath()
-        ctx.roundRect(x, y, barWidth, Math.max(barH, 3), barWidth / 2)
-        ctx.fill()
-      })
-
-      animFrameRef.current = requestAnimationFrame(animate)
+      raf = requestAnimationFrame(draw)
     }
-
-    animFrameRef.current = requestAnimationFrame(animate)
-
+    raf = requestAnimationFrame(draw)
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-      ro.disconnect()
+      cancelAnimationFrame(raf)
+      src.disconnect()
+      void ctx.close()
     }
-  }, [isActive, color, barCount, height])
+  }, [stream, bars, color, height])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: `${height}px`, borderRadius: 8 }}
-    />
-  )
+  return <canvas ref={canvas} aria-hidden="true" />
 }

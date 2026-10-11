@@ -1,343 +1,104 @@
-import React, { useState } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useTranslation } from 'react-i18next'
-import { SUPPORTED_LANGUAGES } from '../i18n/config'
-import i18n from '../i18n/config'
-import {
-  StethoscopeIcon,
-  HospitalCrossIcon,
-  PulseIcon,
-  ClipboardMedicalIcon,
-  WaitingRoomIcon,
-  GlobeLanguageIcon,
-  DoctorHostIcon,
-  PatientIcon,
-  VideoMeetIcon,
-  ShieldCheckIcon,
-} from './MedicalIcons'
+import { useEffect, useState, type ReactNode } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Plus, Settings, Users, Video } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
+import { Avatar } from './ui'
+import { ROLE_LABEL } from '../lib/format'
+import { wsUrl } from '../api/client'
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth()
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [langMenuOpen, setLangMenuOpen] = useState(false)
-
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
-
-  const initials = user?.displayName?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'DR'
-  const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === i18n.language) || SUPPORTED_LANGUAGES[0]
-
-  const getPageTitle = () => {
-    const path = location.pathname
-    if (path.includes('/consultation')) return 'Live Consultation'
-    if (path.includes('/patients')) return 'Patient Management'
-    if (path.includes('/case-sheet')) return 'Clinical Case Sheet'
-    if (path.includes('/case-sheets')) return 'Clinical Case Sheets'
-    if (path.includes('/history')) return 'Consultation History'
-    if (path.includes('/multilingual-summary')) return 'Multilingual Scribe'
-    if (path.includes('/waiting-room')) return 'Patient Waiting Area'
-    if (path.includes('/settings')) return 'Settings'
-    return 'Dashboard'
-  }
-
-  const isConsultation = location.pathname.startsWith('/consultation')
-
-  // Full-width, uncluttered Google Meet experience during live consultation
-  if (isConsultation) {
-    return (
-      <div style={{
-        width: '100vw',
-        height: '100vh',
-        overflow: 'hidden',
-        backgroundColor: '#F8FAFD',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        {children}
-      </div>
-    )
-  }
-
+export function BrandMark() {
   return (
-    <div className="app-layout">
-      {/* Sidebar overlay on mobile */}
-      {sidebarOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 49, backdropFilter: 'blur(4px)' }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+    <div className="brand-mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="currentColor" /></svg>
+    </div>
+  )
+}
 
-      {/* Sidebar with Hospital Material 3 Theme */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        {/* Logo */}
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <HospitalCrossIcon size={22} color="#FFFFFF" />
-          </div>
-          <div className="sidebar-logo-text">
-            <span className="sidebar-logo-name">MedTrust AI</span>
-            <span className="sidebar-logo-sub">Clinical Intelligence</span>
-          </div>
+export default function Layout({ children }: { children: ReactNode }) {
+  const { user, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const loc = useLocation()
+  const nav = useNavigate()
+  useEffect(() => setOpen(false), [loc.pathname])
+
+  // Staff receive waiting-room notifications
+  useEffect(() => {
+    if (!user || user.role === 'patient') return
+    let ws: WebSocket | null = null
+    let timer: number | undefined
+    let stopped = false
+    const connect = () => {
+      ws = new WebSocket(wsUrl('/api/ws/staff'))
+      ws.onmessage = (e) => {
+        const m = JSON.parse(e.data)
+        if (m.type === 'waiting') {
+          setToast(`${m.name} is waiting in the consultation lobby`)
+          window.setTimeout(() => setToast(null), 8000)
+        }
+      }
+      ws.onclose = (e) => {
+        if (!stopped && e.code !== 4401 && e.code !== 4403) timer = window.setTimeout(connect, 4000)
+      }
+    }
+    connect()
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+      ws?.close()
+    }
+  }, [user])
+
+  if (!user) return null
+  const staff = user.role !== 'patient'
+  const items = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, show: true },
+    { to: '/consultations', label: staff ? 'Consultations' : 'My consultations', icon: Video, show: true },
+    { to: '/patients', label: 'Patients', icon: Users, show: staff },
+    { to: user.patient_id ? `/patients/${user.patient_id}` : '/', label: 'My medical history', icon: ClipboardList, show: !staff },
+    { to: '/case-sheets', label: staff ? 'Case sheets' : 'My case sheets', icon: FileText, show: true },
+    { to: '/settings', label: 'Settings', icon: Settings, show: true },
+  ]
+  return (
+    <div className="shell">
+      <div className="mobile-bar no-print">
+        <div className="row"><b style={{ fontFamily: 'var(--serif)' }}>MedTrust AI</b></div>
+        <button className="btn ghost icon" style={{ color: 'var(--paper)', borderColor: 'rgba(255,255,255,.2)' }} onClick={() => setOpen(!open)} aria-label="Menu"><Menu size={18} /></button>
+      </div>
+      <aside className={`side${open ? ' open' : ''}`}>
+        <div className="brand">
+          <BrandMark />
+          <div><b>MedTrust AI</b><span>Clinical teleconsult</span></div>
         </div>
-
-        {/* Navigation */}
-        <nav className="sidebar-nav">
-          <span className="sidebar-section-label">Main Menu</span>
-
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <PulseIcon size={18} color="currentColor" />
-            <span>Dashboard</span>
-          </NavLink>
-
-          <NavLink
-            to="/consultation"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-            style={{
-              backgroundColor: location.pathname.includes('/consultation') ? '#EFF6FF' : undefined,
-              color: location.pathname.includes('/consultation') ? '#0B57D0' : undefined,
-            }}
-          >
-            <VideoMeetIcon size={18} color="currentColor" />
-            <span style={{ flex: 1 }}>Live Consultation</span>
-            <span style={{
-              fontSize: 10,
-              backgroundColor: '#10B981',
-              color: '#FFFFFF',
-              padding: '1px 6px',
-              borderRadius: 10,
-              fontWeight: 700,
-            }}>
-              HOST
-            </span>
-          </NavLink>
-
-          <NavLink
-            to="/patients"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <PatientIcon size={18} color="currentColor" />
-            <span>Patients</span>
-          </NavLink>
-
-          <NavLink
-            to="/case-sheets"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <ClipboardMedicalIcon size={18} color="currentColor" />
-            <span>Case Sheets</span>
-          </NavLink>
-
-          <NavLink
-            to="/history"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <WaitingRoomIcon size={18} color="currentColor" />
-            <span>Consultation History</span>
-          </NavLink>
-
-          <span className="sidebar-section-label" style={{ marginTop: 14 }}>Clinical AI & Tools</span>
-
-          <NavLink
-            to="/multilingual-summary"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <GlobeLanguageIcon size={18} color="currentColor" />
-            <span>Multilingual Scribe</span>
-          </NavLink>
-
-          <NavLink
-            to="/waiting-room"
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <StethoscopeIcon size={18} color="currentColor" />
-            <span>Waiting Room Preview</span>
-          </NavLink>
-
-          {/* Language selector */}
-          <div style={{ position: 'relative', marginTop: 4 }}>
-            <button
-              className="nav-item"
-              style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent', cursor: 'pointer' }}
-              onClick={() => setLangMenuOpen(!langMenuOpen)}
-            >
-              <GlobeLanguageIcon size={18} color="currentColor" />
-              <span style={{ flex: 1 }}>Language</span>
-              <span style={{ fontSize: 11, color: '#0B57D0', backgroundColor: '#EFF6FF', borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>
-                {currentLang.flag} {currentLang.name}
-              </span>
-            </button>
-
-            {langMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                left: 0,
-                bottom: '100%',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                borderRadius: '10px',
-                padding: 6,
-                minWidth: 190,
-                zIndex: 200,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-              }}>
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => { i18n.changeLanguage(lang.code); setLangMenuOpen(false) }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      width: '100%',
-                      padding: '7px 10px',
-                      backgroundColor: i18n.language === lang.code ? '#EFF6FF' : 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: i18n.language === lang.code ? '#0B57D0' : '#475569',
-                      cursor: 'pointer',
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      textAlign: 'left',
-                    }}
-                  >
-                    <span>{lang.flag}</span>
-                    <span>{lang.nativeName}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            className="nav-item"
-            style={{ width: '100%', color: '#DC2626', border: 'none', background: 'transparent', cursor: 'pointer', marginTop: 8 }}
-            onClick={handleLogout}
-          >
-            <span style={{ fontSize: 16 }}>🚪</span>
-            <span>Logout</span>
+        {staff && (
+          <button className="btn signal" style={{ marginBottom: 14 }} onClick={() => nav('/consultations?new=1')}>
+            <Plus size={16} /> New consultation
           </button>
+        )}
+        <nav className="nav stack" style={{ gap: 2 }}>
+          {items.filter((i) => i.show).map((i) => (
+            <NavLink key={i.label} to={i.to} end={i.to === '/'}>
+              <i.icon size={18} /> {i.label}
+            </NavLink>
+          ))}
         </nav>
-
-        {/* User Card (Host Attending Doctor) */}
-        <div className="sidebar-user">
-          <div className="sidebar-user-card">
-            <div className="sidebar-avatar">{initials}</div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{user?.displayName || 'Dr. Rajesh Sharma, MD'}</div>
-              <div className="sidebar-user-role">
-                <span style={{ color: '#0B57D0', fontWeight: 600 }}>Senior Consultant</span> • Host
-              </div>
-            </div>
-          </div>
+        <div className="side-foot">
+          <Avatar name={user.name} />
+          <div className="who"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}{user.registration_number ? ` - ${user.registration_number}` : ''}</span></div>
+          <button className="btn icon" style={{ background: 'transparent', borderColor: 'rgba(255,255,255,.18)' }} onClick={() => { logout(); nav('/login') }} aria-label="Sign out" title="Sign out">
+            <LogOut size={16} />
+          </button>
         </div>
       </aside>
-
-      {/* Main Content Area */}
-      <main className="main-content">
-        {/* Topbar */}
-        <header className="topbar">
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            style={{ display: 'none' }}
-            id="sidebar-toggle"
-          >
-            ☰
-          </button>
-
-          {/* Page Title & Timestamp */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A' }}>
-                {getPageTitle()}
-              </div>
-              <div style={{ fontSize: 11, color: '#64748B' }}>
-                {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </div>
-            </div>
+      <main className="main">
+        {toast && (
+          <div className="alert warn no-print" style={{ position: 'fixed', right: 20, top: 20, zIndex: 80, maxWidth: 380, boxShadow: 'var(--shadow)' }}>
+            <span style={{ flex: 1 }}>{toast}</span>
+            <button className="btn sm" onClick={() => { setToast(null); nav('/consultations?status=live') }}>View</button>
           </div>
-
-          <div className="topbar-actions">
-            {/* Quick Meeting Launcher / Home Link */}
-            <button
-              onClick={() => navigate('/')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
-                backgroundColor: '#EFF6FF',
-                color: '#1A73E8',
-                border: '1px solid #BFDBFE',
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-              title="Go to Public Landing Page & Google Meet Launcher"
-            >
-              <VideoMeetIcon size={15} color="#1A73E8" />
-              <span>Meet Launcher</span>
-            </button>
-
-            {/* Google Meet Connected Badge */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '5px 12px',
-              backgroundColor: '#ECFDF5',
-              borderRadius: 20,
-              border: '1px solid #A7F3D0',
-              fontSize: 12,
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
-              <span style={{ fontWeight: 600, color: '#047857' }}>Google Meet • Active</span>
-            </div>
-
-            {/* Doctor Profile Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 6 }}>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
-                  {user?.displayName || 'Dr. Rajesh Sharma, MD'}
-                </div>
-                <div style={{ fontSize: 11, color: '#64748B' }}>Cardiology & Internal Medicine</div>
-              </div>
-              <div className="sidebar-avatar" style={{ width: 36, height: 36, fontSize: 13 }}>
-                {initials}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <div className="page-container">
-          {children}
-        </div>
+        )}
+        {children}
       </main>
-
-      <style>{`
-        @media (max-width: 1024px) {
-          #sidebar-toggle { display: flex !important; }
-        }
-      `}</style>
     </div>
   )
 }

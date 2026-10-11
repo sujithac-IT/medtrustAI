@@ -1,23 +1,27 @@
-version: '3.8'
-
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8080"
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - PORT=8080
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      PORT: 8080
+      DATABASE_PATH: /data/medtrust.db
+      FRONTEND_DIST: /nonexistent
+    volumes: [medtrust-data:/data]
     restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+    ports: ["3000:80"]
+    depends_on: [backend]
     restart: unless-stopped
+
+volumes:
+  medtrust-data:

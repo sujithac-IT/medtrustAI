@@ -1,204 +1,103 @@
-import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import type { Consultation, Patient, DashboardStats } from '../types'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { CalendarClock, CheckCircle2, FileClock, FileText, Users, Video } from 'lucide-react'
+import { api, type DashboardData } from '../api/client'
+import type { Consultation } from '../api/types'
+import { useAuth } from '../auth/AuthContext'
+import { Alert, Empty, SheetBadge, Spinner, StatusBadge } from '../components/ui'
+import { fmtDateTime } from '../lib/format'
 
-// Demo data
-const DEMO_PATIENTS: Patient[] = [
-  { id: 'p1', name: 'Arjun Krishnamurthy', dob: '1985-06-15', age: 39, gender: 'male', phone: '+91 98765 43210', bloodGroup: 'B+', allergies: ['Penicillin'], conditions: ['Hypertension'], createdAt: '2024-01-10', updatedAt: '2024-09-20' },
-  { id: 'p2', name: 'Priya Sundaram', dob: '1992-03-22', age: 32, gender: 'female', phone: '+91 87654 32109', bloodGroup: 'O+', allergies: [], conditions: ['Type 2 Diabetes'], createdAt: '2024-02-15', updatedAt: '2024-09-18' },
-  { id: 'p3', name: 'Ravi Shankar', dob: '1970-11-08', age: 54, gender: 'male', phone: '+91 76543 21098', bloodGroup: 'A+', allergies: ['Sulfa'], conditions: ['COPD', 'Hypertension'], createdAt: '2024-03-01', updatedAt: '2024-09-15' },
-  { id: 'p4', name: 'Meena Devi', dob: '1998-07-30', age: 26, gender: 'female', phone: '+91 65432 10987', bloodGroup: 'AB-', allergies: [], conditions: [], createdAt: '2024-04-20', updatedAt: '2024-09-10' },
-]
-
-const DEMO_CONSULTATIONS: Consultation[] = [
-  { id: 'c1', patientId: 'p1', patientName: 'Arjun Krishnamurthy', doctorId: 'demo-doctor-001', doctorName: 'Dr. Rajesh Kumar', status: 'completed', startedAt: '2024-09-20T10:00:00Z', endedAt: '2024-09-20T10:35:00Z', duration: 35, transcript: [], caseSheetId: 'cs1', createdAt: '2024-09-20', reason: 'Chest pain evaluation' },
-  { id: 'c2', patientId: 'p2', patientName: 'Priya Sundaram', doctorId: 'demo-doctor-001', doctorName: 'Dr. Rajesh Kumar', status: 'completed', startedAt: '2024-09-20T11:30:00Z', endedAt: '2024-09-20T12:00:00Z', duration: 30, transcript: [], caseSheetId: 'cs2', createdAt: '2024-09-20', reason: 'Diabetes follow-up' },
-  { id: 'c3', patientId: 'p3', patientName: 'Ravi Shankar', doctorId: 'demo-doctor-001', doctorName: 'Dr. Rajesh Kumar', status: 'scheduled', transcript: [], createdAt: '2024-09-21', reason: 'COPD management' },
-]
-
-function StatCard({ value, label, icon, color, change }: { value: number | string; label: string; icon: string; color: string; change?: string }) {
+function ConsultRow({ c, patientView }: { c: Consultation; patientView?: boolean }) {
+  const joinable = c.status === 'scheduled' || c.status === 'live'
   return (
-    <div className={`stat-card ${color}`} style={{ animation: 'slideUp 0.4s ease' }}>
-      <div className={`stat-icon ${color}`} style={{ fontSize: 22 }}>{icon}</div>
-      <div className="stat-value">{value}</div>
-      <div className="stat-label">{label}</div>
-      {change && <div className={`stat-change up`}>↑ {change}</div>}
+    <div className="list-item">
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Link to={`/consultations/${c.id}`} style={{ fontWeight: 600, textDecoration: 'none' }}>
+          {patientView ? c.doctor_name : c.patient_name}
+        </Link>
+        <div className="muted small">
+          {fmtDateTime(c.scheduled_at)}{c.reason ? ` - ${c.reason}` : ''}{!patientView && c.patient_mrn ? ` - ${c.patient_mrn}` : ''}
+        </div>
+      </div>
+      <StatusBadge c={c} />
+      {c.case_sheet_status && <SheetBadge status={c.case_sheet_status} />}
+      {joinable && <Link className="btn sm signal" to={c.join_path}><Video size={14} /> Join</Link>}
+      {c.case_sheet_id && <Link className="btn sm ghost" to={`/case-sheets/${c.case_sheet_id}`}><FileText size={14} /> Sheet</Link>}
     </div>
+  )
+}
+
+function Panel({ title, items, empty, patientView }: { title: string; items?: Consultation[]; empty: string; patientView?: boolean }) {
+  return (
+    <section className="card">
+      <div className="card-head"><h2>{title}</h2><span className="muted small">{items?.length ?? 0}</span></div>
+      {items && items.length ? items.map((c) => <ConsultRow key={c.id} c={c} patientView={patientView} />) : <Empty>{empty}</Empty>}
+    </section>
   )
 }
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
-  const [stats] = useState<DashboardStats>({ totalPatients: 248, consultationsToday: 7, approvedSheets: 183, pendingReview: 3 })
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const isDoctor = user?.role === 'doctor'
+  useEffect(() => {
+    let alive = true
+    const load = () => api.dashboard().then((d) => alive && setData(d)).catch((e) => alive && setError(e.message))
+    void load()
+    const t = window.setInterval(load, 15000)
+    return () => { alive = false; window.clearInterval(t) }
+  }, [])
+
+  if (!user) return null
+  const hour = new Date().getHours()
+  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div>
-      {/* Header */}
-      <div className="section-header">
+    <div className="stack reveal" style={{ gap: 22 }}>
+      <div className="page-head">
         <div>
-          <h1 className="section-title">
-            Good morning, {user?.displayName?.split(' ')[0]} 👋
-          </h1>
-          <p className="section-subtitle">
-            {isDoctor ? "Here's your clinical overview for today" : "Your health consultation dashboard"}
-          </p>
+          <span className="tiny muted">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <h1>{greet}, {user.name.split(' ').slice(0, 2).join(' ')}</h1>
+          <p>{user.role === 'patient' ? 'Your consultations and signed case sheets.' : 'Live rooms, today\'s schedule and records waiting for sign-off.'}</p>
         </div>
-        <button
-          id="new-consultation-btn"
-          className="btn btn-primary"
-          onClick={() => navigate('/consultation')}
-          style={{ gap: 8 }}
-        >
-          <span>📹</span>
-          {isDoctor ? 'Start Consultation' : 'Join Consultation'}
-        </button>
+        {user.role !== 'patient' && <Link className="btn signal" to="/consultations?new=1"><Video size={16} /> Start consultation</Link>}
       </div>
-
-      {/* Stats grid */}
-      {isDoctor && (
-        <div className="grid grid-4" style={{ marginBottom: 32 }}>
-          <StatCard value={stats.totalPatients} label="Total Patients" icon="👥" color="teal" change="12 this month" />
-          <StatCard value={stats.consultationsToday} label="Today's Consultations" icon="📹" color="blue" change="2 from yesterday" />
-          <StatCard value={stats.approvedSheets} label="Approved Case Sheets" icon="✅" color="green" />
-          <StatCard value={stats.pendingReview} label="Pending Review" icon="⏳" color="amber" />
+      {error && <Alert kind="error">{error}</Alert>}
+      {!data && !error && <Spinner />}
+      {data && data.role !== 'patient' && data.stats && (
+        <>
+          <div className="grid g4">
+            {[
+              ['Patients', data.stats.patients, Users],
+              ['Consultations completed', data.stats.completed, CalendarClock],
+              ['Drafts awaiting approval', data.stats.drafts, FileClock],
+              ['Approved case sheets', data.stats.approved, CheckCircle2],
+            ].map(([label, n, Icon]) => {
+              const I = Icon as typeof Users
+              return (
+                <div className="card stat" key={label as string}>
+                  <span className="tiny muted">{label as string}</span>
+                  <div className="n">{n as number}</div>
+                  <I className="bg" />
+                </div>
+              )
+            })}
+          </div>
+          {data.live && data.live.length > 0 && <Panel title="Live now" items={data.live} empty="" />}
+          <div className="grid g2">
+            <Panel title="Upcoming" items={data.upcoming} empty="No scheduled consultations." />
+            <Panel title="Awaiting doctor approval" items={data.awaiting_approval} empty="Every case sheet is signed." />
+          </div>
+          <Panel title="Recently approved" items={data.recent_approved} empty="No approved records yet." />
+        </>
+      )}
+      {data && data.role === 'patient' && (
+        <div className="grid g2">
+          <Panel title="Upcoming consultations" items={data.upcoming} empty="No upcoming consultations. Your doctor will schedule one." patientView />
+          <Panel title="Past consultations" items={data.past} empty="No past consultations yet." patientView />
         </div>
       )}
-
-      {/* Main content grid */}
-      <div className="grid grid-2" style={{ marginBottom: 32 }}>
-        {/* Recent consultations */}
-        <div className="card" style={{ gridColumn: isDoctor ? '1' : '1 / -1' }}>
-          <div className="card-header">
-            <div className="card-title">
-              <span>📋</span> Recent Consultations
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/history')}>View all →</button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {DEMO_CONSULTATIONS.map(c => (
-              <div
-                key={c.id}
-                onClick={() => c.caseSheetId && navigate(`/case-sheet/${c.caseSheetId}`)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '12px 14px',
-                  background: 'var(--color-bg-glass)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  cursor: c.caseSheetId ? 'pointer' : 'default',
-                  transition: 'all 0.2s',
-                }}
-                onMouseOver={e => { if (c.caseSheetId) (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border-hover)' }}
-                onMouseOut={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'}
-              >
-                <div className="avatar avatar-teal" style={{ fontSize: 15 }}>
-                  {c.patientName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>{c.patientName}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{c.reason}</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  <span className={`badge ${c.status === 'completed' ? 'badge-success' : c.status === 'scheduled' ? 'badge-info' : 'badge-warning'} badge-dot`}>
-                    {c.status}
-                  </span>
-                  {c.duration && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.duration} min</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Patient list (doctor only) */}
-        {isDoctor && (
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title"><span>👥</span> Active Patients</div>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/patients')}>Manage →</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {DEMO_PATIENTS.slice(0, 4).map(p => (
-                <div key={p.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  transition: 'background 0.15s',
-                  cursor: 'pointer',
-                }}
-                  onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-bg-glass)'}
-                  onMouseOut={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
-                  onClick={() => navigate(`/history/${p.id}`)}
-                >
-                  <div className="avatar avatar-teal" style={{ fontSize: 13, width: 34, height: 34 }}>
-                    {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{p.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{p.age}y · {p.bloodGroup} · {p.conditions.join(', ') || 'No conditions'}</div>
-                  </div>
-                  {p.allergies.length > 0 && (
-                    <span className="badge badge-warning" style={{ fontSize: 10 }}>⚠ Allergy</span>
-                  )}
-                </div>
-              ))}
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: 8, width: '100%' }}
-                onClick={() => navigate('/patients')}
-              >
-                + Add New Patient
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Quick actions */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title"><span>⚡</span> Quick Actions</div>
-        </div>
-        <div className="grid grid-4">
-          {[
-            { icon: '📹', label: 'New Video Consultation', desc: 'Start live meeting', action: () => navigate('/consultation'), color: 'teal' },
-            { icon: '👥', label: 'Add Patient', desc: 'Register new patient', action: () => navigate('/patients'), color: 'blue' },
-            { icon: '📋', label: 'View History', desc: 'Past consultations', action: () => navigate('/history'), color: 'green' },
-            { icon: '🤖', label: 'AI Demo', desc: 'Try case sheet AI', action: () => navigate('/consultation'), color: 'amber' },
-          ].map((a, i) => (
-            <button
-              key={i}
-              onClick={a.action}
-              style={{
-                padding: 20,
-                background: 'var(--color-bg-glass)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: 8,
-                transition: 'all 0.2s',
-                textAlign: 'left',
-              }}
-              onMouseOver={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--color-border-hover)'; el.style.transform = 'translateY(-2px)' }}
-              onMouseOut={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--color-border)'; el.style.transform = 'translateY(0)' }}
-            >
-              <span style={{ fontSize: 28 }}>{a.icon}</span>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 2 }}>{a.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{a.desc}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
