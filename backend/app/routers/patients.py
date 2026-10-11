@@ -27,7 +27,7 @@ def create_patient(body: PatientIn, user: dict = Depends(staff_only)):
     pid = new_id("pat")
     ts = now_iso()
     try:
-        with tx() as c:
+        with tx(immediate=True) as c:
             mrn = next_mrn(c)
             c.execute("""INSERT INTO patients (id,mrn,first_name,last_name,date_of_birth,gender,blood_group,phone,email,
                          address,emergency_contact_name,emergency_contact_phone,allergies_json,conditions_json,

@@ -12,7 +12,15 @@ Audit date: 2026-10-11. Scope: everything on `main` before the v3 rebuild.
 | 6 | Auth | Global "current user" variable on the server; login needed no password; Firebase ID tokens were never verified. Any caller could act as any doctor. | Critical | PBKDF2 passwords, signed JWT (HS256) per request, RS256 Firebase token verification against Google certs, role guards on every route and socket. |
 | 7 | AI | Gemini path called an undefined `urllib_request`, so it always threw and silently fell back. | High | `httpx` client with JSON response schema, timeout and error handling. |
 | 8 | Patient safety | "Local NLP" fallback returned hard-coded clinical content (diagnoses, drugs) regardless of the transcript. | Critical | Grounded extractor: every field is quoted or derived from the transcript; gaps go to *Missing Information*. Nothing is invented. |
-| 9 | Tests | Tests imported modules that no longer existed; suite could not run. | High | 16 API, extractor and real-socket realtime tests (`pytest`). |
+| 9 | Tests | Tests imported modules that no longer existed; suite could not run. | High | 27 API, management, extractor and real-socket realtime tests (`pytest`). |
 | 10 | Approval | "Approved" was a UI flag; the API still accepted edits. No record of who approved or what. | Critical | Server-enforced lock (409 on edit), optimistic versioning, approver snapshot, SHA-256 content hash, audit trail. |
 | 11 | Privacy | Patients could open any consultation id; drafts were visible to patients. | High | Per-record access checks; patients see only their own approved sheets. |
 | 12 | Ops | Dockerfiles pointed at wrong paths; nginx did not proxy WebSocket upgrades. | Medium | Fixed Dockerfiles, compose and nginx upgrade headers. |
+
+## Follow-up hardening (v3.1)
+| Area | Gap found after v3 | Resolution |
+|---|---|---|
+| Data | MRN generation could race; no schema migrations | `BEGIN IMMEDIATE` transactions, MAX-based MRN sequence, `PRAGMA user_version` migrations |
+| Auth | Tokens survived a password change; no brute-force limit; no account disable | Password fingerprint in JWT, login rate limit (429), disabled accounts rejected |
+| Transcript | Demo transcripts could be appended twice, mixing patients; no way to correct ASR errors | 409 unless `replace`; audited segment edit/delete preserving original text |
+| AI fallback | Local extractor produced coarse medication and symptom fields | Per-drug dose/frequency/route/duration, negation-aware symptoms, doctor-endorsed assessment only |

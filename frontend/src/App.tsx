@@ -14,6 +14,7 @@ import RoomPage from './pages/RoomPage'
 import CaseSheetPage from './pages/CaseSheetPage'
 import CaseSheetsPage from './pages/CaseSheetsPage'
 import SettingsPage from './pages/SettingsPage'
+import StaffPage from './pages/StaffPage'
 
 function Protected({ roles, children, bare }: { roles?: Role[]; children: ReactNode; bare?: boolean }) {
   const { user, loading } = useAuth()
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/consultations/:id" element={<Protected><ConsultationDetailPage /></Protected>} />
       <Route path="/case-sheets" element={<Protected><CaseSheetsPage /></Protected>} />
       <Route path="/case-sheets/:id" element={<Protected><CaseSheetPage /></Protected>} />
+      <Route path="/staff" element={<Protected roles={['doctor']}><StaffPage /></Protected>} />
       <Route path="/settings" element={<Protected><SettingsPage /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -8,13 +8,17 @@ Roles: `doctor`, `student` (together "staff"), `patient`.
 | Method | Path | Who | Body | Response |
 |---|---|---|---|---|
 | GET | /auth/config | public | - | `{demo_mode, firebase_enabled, doctor_signup_requires_invite, demo_accounts}` |
-| POST | /auth/login | public | `{email, password}` | `{token, user}`; 401 |
+| POST | /auth/login | public | `{email, password}` | `{token, user}`; 401 bad credentials; 403 account disabled; 429 + `Retry-After` after 5 failures/email or 50/IP within 300 s |
 | POST | /auth/demo | public (DEMO_MODE) | `{role}` | `{token, user}`; 403 if disabled |
 | POST | /auth/register | public | `{email, password>=8, name, role, invite_code?, registration_number?, date_of_birth?, gender?, phone?}` | 201 `{token, user}`; 403 bad invite, 409 email exists, 422 |
 | POST | /auth/firebase | public | `{id_token, role}` | `{token, user}`; 401 invalid token |
 | GET | /auth/me | any | - | `User` |
+| PATCH | /auth/me | any | `{name?, phone?, specialization?, designation?}` | `User` |
+| POST | /auth/password | any | `{current_password, new_password>=8}` | `{token, user}`; 400 wrong current password; 422 if unchanged. All previously issued tokens become invalid (JWT carries a password fingerprint `pwv`). |
 
-`User = {id, email, name, role, registration_number?, specialization?, designation?, patient_id?}`
+Tokens of disabled users are rejected with 401.
+
+`User = {id, email, name, role, registration_number?, specialization?, designation?, patient_id?, phone?, disabled}`
 
 ## 2. Patients
 | Method | Path | Who | Notes |
@@ -34,18 +38,21 @@ Roles: `doctor`, `student` (together "staff"), `patient`.
 | GET | /consultations?status=&patient_id= | any (patients: own) | includes live `presence {admitted, waiting}` |
 | POST | /consultations | staff | `{patient_id, doctor_id?, student_id?, reason?, scheduled_at?, create_google_meet}` -> 201 |
 | GET | /consultations/{id or room_code} | participant | adds `ice_servers` |
-| PATCH | /consultations/{id} | staff | `{scheduled_at?, reason?, student_id?, status?: scheduled|cancelled}` |
+| PATCH | /consultations/{id} | staff | `{scheduled_at?, reason?, student_id?, doctor_id? (doctor only), status?: cancelled, cancel_reason?}`; reschedule only while `scheduled`; 409 cancelling a live/completed consultation; cancel is audited and broadcast as `status` |
 | POST | /consultations/{id}/start | staff | status -> live, sets started_at, broadcasts `status` |
 | POST | /consultations/{id}/end | doctor | status -> completed, closes room |
 | GET | /consultations/{id}/transcript | participant | `Segment[]` ordered |
 | POST | /consultations/{id}/transcript | participant | `{text, client_id?, language?, speaker_role? (staff only), offset_ms?}` -> 201; idempotent by client_id; 409 if ended |
 | GET | /consultations/demo/scenarios | staff | `Scenario[]` |
-| POST | /consultations/{id}/transcript/demo | staff | `{scenario}` -> `{added}` |
+| POST | /consultations/{id}/transcript/demo | staff | `{scenario, replace?: bool}` -> `{added}`; 409 if a transcript already exists and `replace` is not true |
+| PATCH | /consultations/{id}/transcript/{seg_id} | staff | `{text?, speaker_role?}` -> `Segment`; first original text preserved; audited; 409 if case sheet approved or consultation cancelled |
+| DELETE | /consultations/{id}/transcript/{seg_id} | staff | 204; audited; same 409 rules |
+| GET | /consultations/{id}/transcript.txt | participant | plain-text attachment |
 | POST | /consultations/{id}/transcript/import-google | staff | `{imported, total_entries}`; 400 not configured; 502 Google error |
 | GET | /consultations/{id}/turns | staff | normalised turns used for AI |
 
-`Consultation = {id, room_code, join_path, patient_id, patient_name, patient_mrn, doctor_id, doctor_name, doctor_specialization, student_id?, student_name?, reason?, scheduled_at, status: scheduled|live|completed|cancelled, started_at?, ended_at?, duration_seconds?, case_sheet_id?, case_sheet_status?: draft|approved, segment_count, meet: {provider: in_app|google_meet, meeting_uri?, meeting_code?, space_name?, calendar_html_link?, google_error?}}`
-`Segment = {id, client_id, speaker_role, speaker_user_id?, speaker_name, text, language, offset_ms, source: live|manual|demo|google_meet, created_at}`
+`Consultation = {id, cancel_reason?, room_code, join_path, patient_id, patient_name, patient_mrn, doctor_id, doctor_name, doctor_specialization, student_id?, student_name?, reason?, scheduled_at, status: scheduled|live|completed|cancelled, started_at?, ended_at?, duration_seconds?, case_sheet_id?, case_sheet_status?: draft|approved, segment_count, meet: {provider: in_app|google_meet, meeting_uri?, meeting_code?, space_name?, calendar_html_link?, google_error?}}`
+`Segment = {id, client_id, speaker_role, speaker_user_id?, speaker_name, text, language, offset_ms, source: live|manual|demo|google_meet, created_at, edited, original_text?, edited_at?}`
 
 ## 4. Realtime: `WS /api/consultations/{id}/ws?token=`
 Close codes: 4401 bad token, 4403 not a participant, 4404 not found, 4409 consultation closed.
@@ -97,5 +104,7 @@ Staff notifications: `WS /api/ws/staff?token=` -> `{type: "waiting", consultatio
 | GET /health | public | `{status, gemini, google_meet, firebase, demo_mode, turn}` |
 |---|---|---|
 | GET /config | public | hospital name, languages, features |
-| GET /users?role= | staff | staff directory |
+| GET /users?role=&include_disabled= | staff | staff directory |
+| POST /users | doctor | create doctor/student `{email, password>=8, name, role, registration_number? (required for doctors), specialization?, designation?}` -> 201; 409 email exists; 422 |
+| PATCH /users/{id} | doctor | `{disabled?, specialization?, designation?}`; 404 unknown; 422 when disabling yourself |
 | GET /dashboard | any | staff: `{stats, live, upcoming, awaiting_approval, recent_approved}`; patient: `{upcoming, past}` |

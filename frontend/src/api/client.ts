@@ -21,8 +21,20 @@ export const tokenStore = {
   },
 }
 
-let onUnauthorized: (() => void) | null = null
-export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn }
+let onUnauthorized: ((reason: string) => void) | null = null
+export const setUnauthorizedHandler = (fn: (reason: string) => void) => { onUnauthorized = fn }
+
+/** Seconds until the stored JWT expires (null when there is no readable token). */
+export function tokenSecondsLeft(): number | null {
+  const t = tokenStore.get()
+  if (!t) return null
+  try {
+    const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof payload.exp === 'number' ? payload.exp - Date.now() / 1000 : null
+  } catch {
+    return null
+  }
+}
 
 function errorMessage(body: unknown, fallback: string): string {
   if (body && typeof body === 'object' && 'detail' in body) {
@@ -33,7 +45,7 @@ function errorMessage(body: unknown, fallback: string): string {
   return fallback
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, raw = false): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   const token = tokenStore.get()
   if (token) headers.Authorization = `Bearer ${token}`
@@ -45,17 +57,22 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(0, 'Cannot reach the MedTrust server. Check your connection.')
   }
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
-  if (!res.ok) {
-    if (res.status === 401 && token) onUnauthorized?.()
-    throw new ApiError(res.status, errorMessage(data, `${res.status} ${res.statusText}`))
+  let data: unknown = null
+  if (text && !(raw && res.ok)) {
+    try { data = JSON.parse(text) } catch { data = { detail: text.slice(0, 200) } }
   }
-  return data as T
+  if (!res.ok) {
+    const msg = errorMessage(data, `${res.status} ${res.statusText}`)
+    if (res.status === 401 && token) onUnauthorized?.(msg)
+    throw new ApiError(res.status, msg)
+  }
+  return (raw ? text : data) as T
 }
 
 const get = <T,>(p: string) => request<T>('GET', p)
 const post = <T,>(p: string, b?: unknown) => request<T>('POST', p, b ?? {})
 const patch = <T,>(p: string, b: unknown) => request<T>('PATCH', p, b)
+const del = (p: string) => request<null>('DELETE', p)
 
 export interface Session { token: string; user: User }
 export interface AuthConfig {
@@ -73,6 +90,12 @@ export const api = {
   register: (body: Record<string, unknown>) => post<Session>('/api/auth/register', body),
   firebase: (id_token: string, role: Role) => post<Session>('/api/auth/firebase', { id_token, role }),
   me: () => get<User>('/api/auth/me'),
+  updateMe: (b: { name?: string; phone?: string; specialization?: string; designation?: string }) => patch<User>('/api/auth/me', b),
+  changePassword: (current_password: string, new_password: string) =>
+    post<Session>('/api/auth/password', { current_password, new_password }),
+  createStaff: (b: Record<string, unknown>) => post<User>('/api/users', b),
+  updateStaff: (id: string, b: { disabled?: boolean; designation?: string; specialization?: string }) => patch<User>(`/api/users/${id}`, b),
+  allStaff: () => get<User[]>('/api/users?include_disabled=true'),
   dashboard: () => get<DashboardData>('/api/dashboard'),
   staff: (role?: Role) => get<User[]>(`/api/users${role ? `?role=${role}` : ''}`),
 
@@ -85,13 +108,20 @@ export const api = {
   consultations: (params = '') => get<Consultation[]>(`/api/consultations${params}`),
   consultation: (idOrCode: string) => get<Consultation>(`/api/consultations/${idOrCode}`),
   createConsultation: (b: Record<string, unknown>) => post<Consultation>('/api/consultations', b),
+  updateConsultation: (id: string, b: { scheduled_at?: string; reason?: string; student_id?: string; doctor_id?: string; status?: 'cancelled'; cancel_reason?: string }) =>
+    patch<Consultation>(`/api/consultations/${id}`, b),
   startConsultation: (id: string) => post<Consultation>(`/api/consultations/${id}/start`),
   endConsultation: (id: string) => post<Consultation>(`/api/consultations/${id}/end`),
   transcript: (id: string) => get<Segment[]>(`/api/consultations/${id}/transcript`),
   addSegment: (id: string, b: { text: string; client_id?: string; language?: string; speaker_role?: Role }) =>
     post<Segment>(`/api/consultations/${id}/transcript`, b),
   scenarios: () => get<Scenario[]>('/api/consultations/demo/scenarios'),
-  loadDemo: (id: string, scenario: string) => post<{ added: number }>(`/api/consultations/${id}/transcript/demo`, { scenario }),
+  loadDemo: (id: string, scenario: string, replace = false) =>
+    post<{ added: number }>(`/api/consultations/${id}/transcript/demo`, { scenario, replace }),
+  editSegment: (cid: string, sid: string, b: { text?: string; speaker_role?: Role }) =>
+    patch<Segment>(`/api/consultations/${cid}/transcript/${sid}`, b),
+  deleteSegment: (cid: string, sid: string) => del(`/api/consultations/${cid}/transcript/${sid}`),
+  transcriptText: (cid: string) => request<string>('GET', `/api/consultations/${cid}/transcript.txt`, undefined, true),
   importGoogle: (id: string) => post<{ imported: number; total_entries: number }>(`/api/consultations/${id}/transcript/import-google`),
 
   generateCaseSheet: (cid: string) => post<CaseSheet>(`/api/consultations/${cid}/case-sheet`),

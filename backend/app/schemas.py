@@ -101,9 +101,11 @@ class ConsultationIn(BaseModel):
 
 class ConsultationPatch(BaseModel):
     scheduled_at: str | None = None
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=300)
     student_id: str | None = None
+    doctor_id: str | None = None
     status: Literal["scheduled", "cancelled"] | None = None
+    cancel_reason: str | None = Field(default=None, max_length=300)
 
 
 class TranscriptIn(BaseModel):
@@ -116,6 +118,47 @@ class TranscriptIn(BaseModel):
 
 class DemoTranscriptIn(BaseModel):
     scenario: str = "cardiology"
+    replace: bool = False
+
+
+class SegmentPatch(BaseModel):
+    text: str | None = Field(default=None, min_length=1, max_length=4000)
+    speaker_role: Role | None = None
+
+
+class ProfilePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    phone: str | None = None
+    specialization: str | None = Field(default=None, max_length=120)
+    designation: str | None = Field(default=None, max_length=120)
+
+    @field_validator("phone")
+    @classmethod
+    def phone_ok(cls, v: str | None) -> str | None:
+        if v and not PHONE_RE.match(v.strip()):
+            raise ValueError("Phone must be 8-17 digits, optionally starting with +")
+        return v.strip() if v else v
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class StaffIn(BaseModel):
+    email: EmailStr
+    name: str = Field(min_length=2, max_length=120)
+    role: Literal["doctor", "student"]
+    password: str = Field(min_length=8, max_length=128)
+    registration_number: str | None = Field(default=None, max_length=40)
+    specialization: str | None = Field(default=None, max_length=120)
+    designation: str | None = Field(default=None, max_length=120)
+
+
+class StaffPatch(BaseModel):
+    disabled: bool | None = None
+    designation: str | None = Field(default=None, max_length=120)
+    specialization: str | None = Field(default=None, max_length=120)
 
 
 class CaseSheetPatch(BaseModel):

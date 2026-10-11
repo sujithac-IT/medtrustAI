@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Plus, Settings, Users, Video } from 'lucide-react'
+import { ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Plus, Settings, ShieldCheck, Users, Video } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from './ui'
 import { ROLE_LABEL } from '../lib/format'
@@ -57,6 +57,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     { to: '/patients', label: 'Patients', icon: Users, show: staff },
     { to: user.patient_id ? `/patients/${user.patient_id}` : '/', label: 'My medical history', icon: ClipboardList, show: !staff },
     { to: '/case-sheets', label: staff ? 'Case sheets' : 'My case sheets', icon: FileText, show: true },
+    { to: '/staff', label: 'Clinical staff', icon: ShieldCheck, show: user.role === 'doctor' },
     { to: '/settings', label: 'Settings', icon: Settings, show: true },
   ]
   return (

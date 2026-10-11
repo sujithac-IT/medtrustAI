@@ -9,6 +9,8 @@ export interface User {
   specialization?: string | null
   designation?: string | null
   patient_id?: string | null
+  phone?: string | null
+  disabled?: boolean
 }
 
 export interface Patient {
@@ -62,6 +64,7 @@ export interface Consultation {
   case_sheet_id?: string | null
   case_sheet_status?: 'draft' | 'approved' | null
   segment_count: number
+  cancel_reason?: string | null
   meet: MeetInfo
   presence?: { admitted: number; waiting: number }
   ice_servers?: RTCIceServer[]
@@ -78,6 +81,9 @@ export interface Segment {
   offset_ms: number
   source: 'live' | 'manual' | 'demo' | 'google_meet'
   created_at: string
+  edited?: boolean
+  original_text?: string | null
+  edited_at?: string | null
 }
 
 export interface Medication { name: string; dose: string; frequency: string; route: string; duration: string; instructions: string }

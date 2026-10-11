@@ -38,7 +38,7 @@ def consultation_out(c: dict[str, Any]) -> dict[str, Any]:
     out = {k: c.get(k) for k in ("id", "room_code", "patient_id", "patient_name", "patient_mrn", "doctor_id",
                                  "doctor_name", "doctor_specialization", "student_id", "student_name", "reason",
                                  "scheduled_at", "status", "started_at", "ended_at", "case_sheet_id",
-                                 "case_sheet_status", "segment_count", "created_at")}
+                                 "case_sheet_status", "segment_count", "created_at", "cancel_reason")}
     out["join_path"] = f"/room/{c['room_code']}"
     out["meet"] = json.loads(c.get("meet_json") or "{}")
     if out["started_at"] and out["ended_at"]:
@@ -76,8 +76,12 @@ def ensure_patient_access(user: dict[str, Any], patient_id: str) -> None:
 
 
 def segment_out(s: dict[str, Any]) -> dict[str, Any]:
-    return {k: s[k] for k in ("id", "client_id", "speaker_role", "speaker_user_id", "speaker_name", "text",
-                              "language", "offset_ms", "source", "created_at")}
+    out = {k: s[k] for k in ("id", "client_id", "speaker_role", "speaker_user_id", "speaker_name", "text",
+                             "language", "offset_ms", "source", "created_at")}
+    out["edited"] = bool(s.get("edited_at"))
+    out["original_text"] = s.get("original_text")
+    out["edited_at"] = s.get("edited_at")
+    return out
 
 
 def case_sheet_out(cs: dict[str, Any]) -> dict[str, Any]:

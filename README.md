@@ -42,6 +42,10 @@ Docker: `docker compose up --build`. The UI is served on http://localhost:3000, 
 4. Click **Generate case sheet**. Review the 17 sections in Edit mode, then click **Review & approve**. The sheet is now signed and read-only.
 5. As the patient, open **My case sheets**. The signed record is there, with a summary in 6 languages and voice playback.
 
+Also available: transcript correction (edit/delete segments before approval, originals kept), transcript export, reschedule/cancel with reason, profile and password change, and a **Clinical staff** page where doctors add or disable doctor/student accounts.
+
+Operational notes: the SQLite schema migrates automatically on startup (`PRAGMA user_version`); logins are rate-limited (5 failures per email / 50 per IP in 5 minutes); changing a password signs out all other sessions.
+
 ## Configuration (`.env`)
 | Feature | Variables | Without it |
 |---|---|---|

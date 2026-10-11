@@ -126,7 +126,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.icon { padding: 8px; width: 38px; height: 38px; }
 
 .field { display: flex; flex-direction: column; gap: 5px; }
-.field label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+.field label, label.field > span { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
 .input, select.input, textarea.input {
   width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper-2);
   outline: none; transition: border 0.15s, box-shadow 0.15s;
@@ -263,6 +263,10 @@ a.list-item:hover { background: var(--paper-2); }
 .seg .meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-soft); }
 .seg .meta b { color: var(--ink); font-size: 12.5px; }
 .seg p { margin: 2px 0 0; font-size: 14px; }
+.seg-tools { margin-left: auto; display: inline-flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.seg-tools .btn { border: none; padding: 3px 5px; }
+.seg:hover .seg-tools, .seg:focus-within .seg-tools { opacity: 1; }
+@media (hover: none) { .seg-tools { opacity: 1; } }
 .seg.interim p { color: var(--ink-soft); font-style: italic; }
 
 /* Pre-join */

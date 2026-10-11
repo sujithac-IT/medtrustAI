@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { GraduationCap, Stethoscope, UserRound } from 'lucide-react'
 import { api, type AuthConfig } from '../api/client'
-import { useAuth } from '../auth/AuthContext'
+import { takeSignoutReason, useAuth } from '../auth/AuthContext'
 import type { Role } from '../api/types'
 import { Alert, Spinner } from '../components/ui'
 import { BrandMark } from '../components/Layout'
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [cfg, setCfg] = useState<AuthConfig | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [signedOut] = useState(() => takeSignoutReason())
   const [f, setF] = useState({ email: '', password: '', name: '', role: 'patient' as Role, invite_code: '', registration_number: '', date_of_birth: '', gender: 'Female', phone: '', remember: true })
 
   useEffect(() => { api.authConfig().then(setCfg).catch(() => setCfg(null)) }, [])
@@ -89,6 +90,7 @@ export default function LoginPage() {
               <div className="divider">or</div>
             </>
           )}
+          {signedOut && !error && <div style={{ marginBottom: 12 }}><Alert kind="warn">{signedOut}</Alert></div>}
           {error && <div style={{ marginBottom: 12 }}><Alert kind="error">{error}</Alert></div>}
           <form className="stack" onSubmit={submit}>
             {mode === 'register' && (

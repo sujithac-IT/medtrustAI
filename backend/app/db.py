@@ -127,9 +127,12 @@ def connect() -> sqlite3.Connection:
 
 
 @contextmanager
-def tx() -> Iterator[sqlite3.Connection]:
+def tx(immediate: bool = False) -> Iterator[sqlite3.Connection]:
+    """Transaction scope. `immediate=True` takes the write lock up front (serialises read-then-write logic)."""
     conn = connect()
     try:
+        if immediate:
+            conn.execute("BEGIN IMMEDIATE")
         yield conn
         conn.commit()
     except Exception:
@@ -157,8 +160,12 @@ def audit(conn: sqlite3.Connection, user_id: str | None, action: str, entity: st
 
 
 def next_mrn(conn: sqlite3.Connection) -> str:
+    """Next MRN for this year. Call inside `tx(immediate=True)` so concurrent creates cannot collide."""
     year = date.today().year
-    n = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0] + 1
+    prefix = f"MT-{year}-"
+    last = conn.execute("SELECT MAX(CAST(substr(mrn, ?) AS INTEGER)) FROM patients WHERE mrn LIKE ?",
+                        (len(prefix) + 1, prefix + "%")).fetchone()[0]
+    n = (last or 0) + 1
     while True:
         mrn = f"MT-{year}-{n:05d}"
         if not conn.execute("SELECT 1 FROM patients WHERE mrn=?", (mrn,)).fetchone():
@@ -166,9 +173,38 @@ def next_mrn(conn: sqlite3.Connection) -> str:
         n += 1
 
 
+# Forward-only schema migrations, tracked with PRAGMA user_version. Append; never edit a shipped entry.
+MIGRATIONS: list[list[str]] = [
+    [  # 1: transcript corrections + staff account lifecycle
+        "ALTER TABLE transcript_segments ADD COLUMN original_text TEXT",
+        "ALTER TABLE transcript_segments ADD COLUMN edited_by TEXT",
+        "ALTER TABLE transcript_segments ADD COLUMN edited_at TEXT",
+        "ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN phone TEXT",
+        "ALTER TABLE consultations ADD COLUMN cancel_reason TEXT",
+        "CREATE INDEX IF NOT EXISTS ix_audit_entity ON audit_log(entity, entity_id)",
+        "CREATE INDEX IF NOT EXISTS ix_consult_patient ON consultations(patient_id, scheduled_at)",
+    ],
+]
+
+
+def migrate(c: sqlite3.Connection) -> int:
+    version = c.execute("PRAGMA user_version").fetchone()[0]
+    for i, stmts in enumerate(MIGRATIONS[version:], start=version + 1):
+        for sql in stmts:
+            try:
+                c.execute(sql)
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e):
+                    raise
+        c.execute(f"PRAGMA user_version={i}")
+    return len(MIGRATIONS)
+
+
 def init_db() -> None:
     with tx() as c:
         c.executescript(SCHEMA)
+        migrate(c)
         if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
             _seed(c)
 

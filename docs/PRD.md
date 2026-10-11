@@ -42,7 +42,9 @@ Non-goals (v3): EHR/HL7/FHIR export, e-prescriptions, billing, SFU media server 
 ### FR6 History
 - FR6.1 Per-patient consultation timeline with status and case sheet links; full 17-section viewer; dashboard cross-consultation views (live, upcoming, awaiting approval, recently approved).
 ### FR7 Authentication
-- FR7.1 Email/password with JWT sessions; FR7.2 optional Firebase Google sign-in (server-verified); FR7.3 demo accounts when `DEMO_MODE=true`; FR7.4 protected routes and role guards on API and sockets; staff self-registration requires invite code.
+- FR7.1 Email/password with JWT sessions; FR7.2 optional Firebase Google sign-in (server-verified); FR7.3 demo accounts when `DEMO_MODE=true`; FR7.4 protected routes and role guards on API and sockets; staff self-registration requires invite code; FR7.5 profile edit and password change (revokes old sessions); FR7.6 login rate limiting; FR7.7 doctors manage clinical staff accounts (create, disable).
+### FR8 Consultation management
+- FR8.1 Reschedule, reassign student/doctor, cancel with reason (audited, broadcast). FR8.2 Staff correct transcript segments before approval; originals preserved. FR8.3 Transcript export as text.
 
 ## 5. Non-functional requirements
 - Security: no PHI in localStorage except the session token; all authorisation server-side; HTTPS required for camera/mic outside localhost; TURN for restrictive networks.

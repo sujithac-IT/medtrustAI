@@ -1,11 +1,12 @@
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
 from ..db import DEMO_PASSWORD, audit, new_id, next_mrn, now_iso, one, tx
-from ..schemas import DemoLoginIn, FirebaseIn, LoginIn, RegisterIn
-from ..security import current_user, hash_password, issue_token, public_user, verify_firebase_token, verify_password
+from ..schemas import DemoLoginIn, FirebaseIn, LoginIn, PasswordChangeIn, ProfilePatch, RegisterIn
+from ..security import (current_user, hash_password, issue_token, login_limiter, public_user, verify_firebase_token,
+                        verify_password)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 DEMO_ACCOUNTS = {"doctor": "doctor@medtrust.demo", "student": "student@medtrust.demo",
@@ -26,10 +27,17 @@ def auth_config():
 
 
 @router.post("/login")
-def login(body: LoginIn):
-    user = one("SELECT * FROM users WHERE lower(email)=lower(?)", (body.email.strip(),))
+def login(body: LoginIn, request: Request):
+    email = body.email.strip().lower()
+    keys = (f"email:{email}", f"ip:{request.client.host if request.client else '-'}")
+    login_limiter.check(*keys)
+    user = one("SELECT * FROM users WHERE lower(email)=?", (email,))
     if not user or not verify_password(body.password, user["password_hash"]):
+        login_limiter.fail(*keys)
         raise HTTPException(401, "Incorrect email or password")
+    if user.get("disabled"):
+        raise HTTPException(403, "This account has been disabled. Contact the hospital administrator.")
+    login_limiter.reset(keys[0])
     with tx() as c:
         audit(c, user["id"], "login", "user", user["id"])
     return _session(user)
@@ -54,7 +62,7 @@ def _create_user(body: RegisterIn | None, *, email: str, name: str, role: str, p
     uid = new_id("usr")
     ts = now_iso()
     try:
-        with tx() as c:
+        with tx(immediate=True) as c:
             patient_id = None
             if role == "patient":
                 first, _, last = name.partition(" ")
@@ -103,3 +111,33 @@ def firebase_login(body: FirebaseIn):
 @router.get("/me")
 def me(user: dict = Depends(current_user)):
     return public_user(user)
+
+
+@router.patch("/me")
+def update_me(body: ProfilePatch, user: dict = Depends(current_user)):
+    data = body.model_dump(exclude_unset=True)
+    if user["role"] == "patient":
+        data.pop("specialization", None)
+        data.pop("designation", None)
+    data = {k: (v.strip() if isinstance(v, str) else v) for k, v in data.items()}
+    if data:
+        with tx() as c:
+            c.execute(f"UPDATE users SET {', '.join(f'{k}=?' for k in data)} WHERE id=?", (*data.values(), user["id"]))
+            if user["role"] == "patient" and user.get("patient_id") and data.get("phone"):
+                c.execute("UPDATE patients SET phone=?, updated_at=? WHERE id=?",
+                          (data["phone"], now_iso(), user["patient_id"]))
+            audit(c, user["id"], "update_profile", "user", user["id"], {"fields": sorted(data)})
+    return public_user(one("SELECT * FROM users WHERE id=?", (user["id"],)))  # type: ignore[arg-type]
+
+
+@router.post("/password")
+def change_password(body: PasswordChangeIn, user: dict = Depends(current_user)):
+    """Change password. Returns a fresh session; all previously issued tokens stop validating."""
+    if user.get("password_hash") and not verify_password(body.current_password, user["password_hash"]):
+        raise HTTPException(400, "Current password is incorrect")
+    if body.new_password == body.current_password:
+        raise HTTPException(422, "New password must be different from the current password")
+    with tx() as c:
+        c.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(body.new_password), user["id"]))
+        audit(c, user["id"], "change_password", "user", user["id"])
+    return _session(one("SELECT * FROM users WHERE id=?", (user["id"],)))  # type: ignore[arg-type]

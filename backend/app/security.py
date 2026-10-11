@@ -39,14 +39,16 @@ def verify_password(password: str, stored: str | None) -> bool:
 def issue_token(user: dict[str, Any]) -> str:
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {"sub": user["id"], "role": user["role"], "iat": now,
+    payload = {"sub": user["id"], "role": user["role"], "iat": now, "pwv": _pw_version(user),
                "exp": now + timedelta(hours=s.jwt_ttl_hours)}
     return jwt.encode(payload, s.jwt_secret, algorithm="HS256")
 
 
 def public_user(u: dict[str, Any]) -> dict[str, Any]:
-    return {k: u.get(k) for k in ("id", "email", "name", "role", "registration_number", "specialization",
-                                  "designation", "patient_id")}
+    out = {k: u.get(k) for k in ("id", "email", "name", "role", "registration_number", "specialization",
+                                 "designation", "patient_id", "phone")}
+    out["disabled"] = bool(u.get("disabled"))
+    return out
 
 
 def user_from_token(token: str) -> dict[str, Any]:
@@ -57,7 +59,54 @@ def user_from_token(token: str) -> dict[str, Any]:
     user = one("SELECT * FROM users WHERE id=?", (payload["sub"],))
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User no longer exists")
+    if user.get("disabled"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account has been disabled")
+    if payload.get("pwv") is not None and payload["pwv"] != _pw_version(user):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Password changed - please sign in again")
     return user
+
+
+def _pw_version(user: dict[str, Any]) -> str:
+    """Short fingerprint of the password hash; tokens issued before a password change stop validating."""
+    return hashlib.sha256((user.get("password_hash") or "none").encode()).hexdigest()[:10]
+
+
+class LoginLimiter:
+    """In-memory sliding-window limiter for failed logins (per email and per client IP)."""
+
+    def __init__(self, max_failures: int = 5, window_s: int = 300) -> None:
+        self.max, self.window = max_failures, window_s
+        self.fails: dict[str, list[float]] = {}
+
+    def _recent(self, key: str) -> list[float]:
+        now = time.time()
+        hits = [t for t in self.fails.get(key, []) if now - t < self.window]
+        self.fails[key] = hits
+        return hits
+
+    def limit(self, key: str) -> int:
+        # Hospitals sit behind shared NAT, so the per-IP budget is much larger than the per-account one.
+        return self.max * 10 if key.startswith("ip:") else self.max
+
+    def check(self, *keys: str) -> None:
+        for k in keys:
+            hits = self._recent(k)
+            if len(hits) >= self.limit(k):
+                retry = int(self.window - (time.time() - hits[0])) + 1
+                raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
+                                    f"Too many failed sign-in attempts. Try again in {retry} seconds.",
+                                    headers={"Retry-After": str(retry)})
+
+    def fail(self, *keys: str) -> None:
+        for k in keys:
+            self.fails.setdefault(k, []).append(time.time())
+
+    def reset(self, *keys: str) -> None:
+        for k in keys:
+            self.fails.pop(k, None)
+
+
+login_limiter = LoginLimiter()
 
 
 def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict[str, Any]:

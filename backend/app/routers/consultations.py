@@ -6,15 +6,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
 
 from ..config import get_settings
 from ..db import audit, many, new_id, now_iso, one, tx
 from ..realtime import Peer, hub
-from ..schemas import ConsultationIn, ConsultationPatch, DemoTranscriptIn, TranscriptIn
+from ..schemas import ConsultationIn, ConsultationPatch, DemoTranscriptIn, SegmentPatch, TranscriptIn
 from ..security import current_user, doctor_only, staff_only, user_from_token
 from ..serializers import (CONSULT_SQL, can_access_consultation, consultation_out, ensure_consultation_access,
                            get_consultation, segment_out)
 from ..services import google_meet, samples
+from ..services.transcript import fmt_ms
 
 log = logging.getLogger("medtrust.consult")
 router = APIRouter(prefix="/api/consultations", tags=["consultations"])
@@ -102,17 +104,48 @@ def get_one(cid: str, user: dict = Depends(current_user)):
 
 
 @router.patch("/{cid}")
-def patch_consultation(cid: str, body: ConsultationPatch, user: dict = Depends(staff_only)):
+async def patch_consultation(cid: str, body: ConsultationPatch, user: dict = Depends(staff_only)):
     c = get_consultation(cid)
     if c["status"] in ("completed", "cancelled"):
         raise HTTPException(409, f"Consultation is {c['status']}")
     data = body.model_dump(exclude_unset=True)
+    if "scheduled_at" in data:
+        if c["status"] != "scheduled":
+            raise HTTPException(409, "Only scheduled consultations can be rescheduled")
+        try:
+            when = datetime.fromisoformat(str(data["scheduled_at"]).replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(422, "scheduled_at must be ISO-8601")
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        data["scheduled_at"] = when.isoformat(timespec="seconds")
+    if data.get("student_id") == "":
+        data["student_id"] = None
+    if data.get("student_id") and not one("SELECT 1 FROM users WHERE id=? AND role='student' AND disabled=0",
+                                          (data["student_id"],)):
+        raise HTTPException(422, "student_id is not an active student")
+    if "doctor_id" in data:
+        if user["role"] != "doctor":
+            raise HTTPException(403, "Only doctors can reassign the attending doctor")
+        if not one("SELECT 1 FROM users WHERE id=? AND role='doctor' AND disabled=0", (data["doctor_id"],)):
+            raise HTTPException(422, "doctor_id is not an active doctor")
+    if data.get("status") == "cancelled":
+        if c["status"] == "live":
+            raise HTTPException(409, "End the live consultation instead of cancelling it")
+    elif "cancel_reason" in data:
+        data.pop("cancel_reason")
+    if data.get("status") == "scheduled":
+        data.pop("status")
     if data:
         with tx() as conn:
             conn.execute(f"UPDATE consultations SET {', '.join(f'{k}=?' for k in data)} WHERE id=?",
                          (*data.values(), c["id"]))
-            audit(conn, user["id"], "update", "consultation", c["id"], data)
-    return consultation_out(get_consultation(c["id"]))
+            audit(conn, user["id"], "cancel" if data.get("status") == "cancelled" else "update", "consultation",
+                  c["id"], data)
+    out = consultation_out(get_consultation(c["id"]))
+    if out["status"] == "cancelled":
+        await hub.to_consultation(out["id"], {"type": "status", "status": "cancelled"})
+    return out
 
 
 def _set_status(cid: str, status: str, user: dict) -> dict:
@@ -190,12 +223,82 @@ async def add_segment(cid: str, body: TranscriptIn, user: dict = Depends(current
     return seg or {"duplicate": True}
 
 
+def _editable(c: dict) -> None:
+    if c["case_sheet_status"] == "approved":
+        raise HTTPException(409, "The case sheet is approved; the transcript is locked")
+    if c["status"] == "cancelled":
+        raise HTTPException(409, "Consultation is cancelled")
+
+
+def _segment(c: dict, seg_id: str) -> dict:
+    s = one("SELECT * FROM transcript_segments WHERE id=? AND consultation_id=?", (seg_id, c["id"]))
+    if not s:
+        raise HTTPException(404, "Transcript segment not found")
+    return s
+
+
+@router.patch("/{cid}/transcript/{seg_id}")
+async def edit_segment(cid: str, seg_id: str, body: SegmentPatch, user: dict = Depends(staff_only)):
+    """Correct a speech-recognition error or a wrong speaker. The first original text is preserved."""
+    c = get_consultation(cid)
+    _editable(c)
+    s = _segment(c, seg_id)
+    data = body.model_dump(exclude_unset=True, exclude_none=True)
+    if not data:
+        return segment_out(s)
+    if "text" in data:
+        data["text"] = data["text"].strip()
+    with tx() as conn:
+        conn.execute(f"""UPDATE transcript_segments SET {', '.join(f'{k}=?' for k in data)},
+                         original_text=COALESCE(original_text, ?), edited_by=?, edited_at=? WHERE id=?""",
+                     (*data.values(), s["text"], user["id"], now_iso(), s["id"]))
+        audit(conn, user["id"], "edit_segment", "consultation", c["id"],
+              {"segment": s["id"], "fields": sorted(data), "before": s["text"][:500]})
+    seg = segment_out(_segment(c, seg_id))
+    await hub.to_consultation(c["id"], {"type": "transcript.reload"})
+    return seg
+
+
+@router.delete("/{cid}/transcript/{seg_id}", status_code=204)
+async def delete_segment(cid: str, seg_id: str, user: dict = Depends(staff_only)):
+    c = get_consultation(cid)
+    _editable(c)
+    s = _segment(c, seg_id)
+    with tx() as conn:
+        conn.execute("DELETE FROM transcript_segments WHERE id=?", (s["id"],))
+        audit(conn, user["id"], "delete_segment", "consultation", c["id"],
+              {"segment": s["id"], "speaker": s["speaker_name"], "text": s["text"][:500]})
+    await hub.to_consultation(c["id"], {"type": "transcript.reload"})
+
+
+@router.get("/{cid}/transcript.txt", response_class=PlainTextResponse)
+def export_transcript(cid: str, user: dict = Depends(current_user)):
+    c = get_consultation(cid)
+    ensure_consultation_access(user, c)
+    segs = many("SELECT * FROM transcript_segments WHERE consultation_id=? ORDER BY offset_ms, created_at", (c["id"],))
+    head = [f"{get_settings().hospital_name} - consultation transcript",
+            f"Patient: {c['patient_name']} ({c['patient_mrn']})", f"Doctor: {c['doctor_name']}",
+            f"Student: {c['student_name'] or '-'}", f"Scheduled: {c['scheduled_at']}", f"Status: {c['status']}",
+            f"Consultation: {c['id']}", "-" * 60, ""]
+    body = [f"[{fmt_ms(s['offset_ms'])}] {s['speaker_name']} ({s['speaker_role']}): {s['text']}" for s in segs]
+    return PlainTextResponse("\n".join(head + (body or ["(no transcript recorded)"])) + "\n",
+                             headers={"Content-Disposition": f'attachment; filename="transcript-{c["room_code"]}.txt"'})
+
+
 @router.post("/{cid}/transcript/demo", status_code=201)
 async def load_demo(cid: str, body: DemoTranscriptIn, user: dict = Depends(staff_only)):
     c = get_consultation(cid)
+    _editable(c)
     sc = samples.get_scenario(body.scenario)
     if not sc:
         raise HTTPException(404, "Unknown scenario")
+    existing = one("SELECT COUNT(*) AS n FROM transcript_segments WHERE consultation_id=?", (c["id"],))["n"]  # type: ignore[index]
+    if existing and not body.replace:
+        raise HTTPException(409, f"Transcript already has {existing} segment(s). Send replace=true to clear it first.")
+    if existing:
+        with tx() as conn:
+            conn.execute("DELETE FROM transcript_segments WHERE consultation_id=?", (c["id"],))
+            audit(conn, user["id"], "clear_transcript", "consultation", c["id"], {"removed": existing})
     added = []
     for i, t in enumerate(sc["turns"]):
         mm, ss = t["timestamp"].split(":")
