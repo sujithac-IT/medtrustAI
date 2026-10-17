@@ -1,19 +1,26 @@
-import sqlite3
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
-from ..db import DEMO_PASSWORD, audit, new_id, next_mrn, now_iso, one, tx
-from ..schemas import DemoLoginIn, FirebaseIn, LoginIn, PasswordChangeIn, ProfilePatch, RegisterIn
-from ..security import (current_user, hash_password, issue_token, login_limiter, public_user, verify_firebase_token,
-                        verify_password)
+from ..db import DEMO_PASSWORD, IntegrityError, audit, new_id, next_mrn, now_iso, one, tx
+from ..ratelimit import limiter, login_guard
+from ..realtime import hub
+from ..schemas import DemoLoginIn, FirebaseIn, LoginIn, PasswordChangeIn, ProfilePatch, RegisterIn, WsTicketIn
+from ..security import (current_user, hash_password, issue_token, issue_ws_ticket, password_problem, public_user,
+                        verify_firebase_token, verify_password, verify_password_constant_time)
+from ..serializers import ensure_consultation_access, get_consultation
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 DEMO_ACCOUNTS = {"doctor": "doctor@medtrust.demo", "student": "student@medtrust.demo",
                  "patient": "patient@medtrust.demo"}
 
 
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "-"
+
+
 def _session(user: dict) -> dict:
+    if user.get("disabled"):
+        raise HTTPException(403, "This account has been disabled. Contact the hospital administrator.")
     return {"token": issue_token(user), "token_type": "bearer", "user": public_user(user)}
 
 
@@ -29,24 +36,25 @@ def auth_config():
 @router.post("/login")
 def login(body: LoginIn, request: Request):
     email = body.email.strip().lower()
-    keys = (f"email:{email}", f"ip:{request.client.host if request.client else '-'}")
-    login_limiter.check(*keys)
+    keys = (f"login:email:{email}", f"login:ip:{client_ip(request)}")
+    login_guard.check(*keys)
     user = one("SELECT * FROM users WHERE lower(email)=?", (email,))
-    if not user or not verify_password(body.password, user["password_hash"]):
-        login_limiter.fail(*keys)
+    if not user or not verify_password_constant_time(body.password, user["password_hash"]):
+        login_guard.fail(*keys)
         raise HTTPException(401, "Incorrect email or password")
     if user.get("disabled"):
         raise HTTPException(403, "This account has been disabled. Contact the hospital administrator.")
-    login_limiter.reset(keys[0])
+    login_guard.reset(keys[0])
     with tx() as c:
         audit(c, user["id"], "login", "user", user["id"])
     return _session(user)
 
 
 @router.post("/demo")
-def demo_login(body: DemoLoginIn):
+def demo_login(body: DemoLoginIn, request: Request):
     if not get_settings().demo_mode:
         raise HTTPException(403, "Demo mode is disabled")
+    limiter.hit(f"demo:ip:{client_ip(request)}", 60, 60, "Too many demo sign-ins")
     user = one("SELECT * FROM users WHERE email=?", (DEMO_ACCOUNTS[body.role],))
     if not user:
         raise HTTPException(500, "Demo account missing")
@@ -79,15 +87,19 @@ def _create_user(body: RegisterIn | None, *, email: str, name: str, role: str, p
                        body.registration_number if body else None, body.specialization if body else None,
                        patient_id, ts))
             audit(c, uid, "register", "user", uid, {"role": role})
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise HTTPException(409, "An account with this email already exists")
     return one("SELECT * FROM users WHERE id=?", (uid,))  # type: ignore[return-value]
 
 
 @router.post("/register", status_code=201)
-def register(body: RegisterIn):
+def register(body: RegisterIn, request: Request):
+    limiter.hit(f"register:ip:{client_ip(request)}", 10, 3600, "Too many registrations from this network")
     if body.role == "doctor" and not body.registration_number:
         raise HTTPException(422, "Medical registration number is required for doctors")
+    problem = password_problem(body.password, body.email, body.name)
+    if problem:
+        raise HTTPException(422, problem)
     user = _create_user(body, email=body.email, name=body.name.strip(), role=body.role,
                         password_hash=hash_password(body.password))
     return _session(user)
@@ -131,13 +143,31 @@ def update_me(body: ProfilePatch, user: dict = Depends(current_user)):
 
 
 @router.post("/password")
-def change_password(body: PasswordChangeIn, user: dict = Depends(current_user)):
+async def change_password(body: PasswordChangeIn, user: dict = Depends(current_user)):
     """Change password. Returns a fresh session; all previously issued tokens stop validating."""
     if user.get("password_hash") and not verify_password(body.current_password, user["password_hash"]):
         raise HTTPException(400, "Current password is incorrect")
     if body.new_password == body.current_password:
         raise HTTPException(422, "New password must be different from the current password")
+    problem = password_problem(body.new_password, user["email"], user["name"])
+    if problem:
+        raise HTTPException(422, problem)
     with tx() as c:
         c.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(body.new_password), user["id"]))
         audit(c, user["id"], "change_password", "user", user["id"])
+    await hub.disconnect_user(user["id"], 4401, "Password changed")
     return _session(one("SELECT * FROM users WHERE id=?", (user["id"],)))  # type: ignore[arg-type]
+
+
+@router.post("/ws-ticket")
+def ws_ticket(body: WsTicketIn, user: dict = Depends(current_user)):
+    """One-minute ticket for opening a WebSocket. Keeps the session token out of URLs and logs."""
+    if body.consultation_id:
+        c = get_consultation(body.consultation_id)
+        ensure_consultation_access(user, c)
+        scope = f"consultation:{c['id']}"
+    else:
+        if user["role"] == "patient":
+            raise HTTPException(403, "Staff notifications are for clinical staff")
+        scope = "staff"
+    return {"ticket": issue_ws_ticket(user, scope), "expires_in": 60}

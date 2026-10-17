@@ -1,7 +1,5 @@
 """Transcript corrections, demo replace, consultation management, accounts, staff admin, robustness."""
-import sqlite3
-
-from app.db import connect, next_mrn
+from app.db import dialect, next_mrn, schema_version, tx, MIGRATIONS
 
 
 def _h(r):
@@ -26,7 +24,8 @@ def test_segment_edit_delete_export_and_lock(client, doctor, student, patient):
     dh, _ = doctor
     sh, _ = student
     ph, pdata = patient
-    c = client.post("/api/consultations", headers=dh, json={"patient_id": pdata["user"]["patient_id"]}).json()
+    c = client.post("/api/consultations", headers=dh, json={"patient_id": pdata["user"]["patient_id"],
+                                                             "student_id": "usr_student"}).json()
     cid = c["id"]
     a = client.post(f"/api/consultations/{cid}/transcript", headers=ph,
                     json={"text": "I have chest pane for 2 days.", "client_id": "x1"}).json()
@@ -56,7 +55,8 @@ def test_reschedule_assign_cancel(client, doctor, student, patient):
     dh, _ = doctor
     sh, _ = student
     ph, pdata = patient
-    c = client.post("/api/consultations", headers=dh, json={"patient_id": pdata["user"]["patient_id"]}).json()
+    c = client.post("/api/consultations", headers=dh, json={"patient_id": pdata["user"]["patient_id"],
+                                                             "student_id": "usr_student"}).json()
     r = client.patch(f"/api/consultations/{c['id']}", headers=sh,
                      json={"scheduled_at": "2030-01-02T10:30:00+05:30", "student_id": "usr_student"})
     assert r.status_code == 200 and r.json()["student_name"] == "Sneha Patel"
@@ -91,13 +91,10 @@ def test_profile_and_password_change(client):
 
 
 def test_login_rate_limit(client):
-    from app.security import login_limiter
-    login_limiter.fails.clear()
     for _ in range(5):
         assert client.post("/api/auth/login", json={"email": "meera@medtrust.demo", "password": "bad"}).status_code == 401
     r = client.post("/api/auth/login", json={"email": "meera@medtrust.demo", "password": "MedTrust@123"})
     assert r.status_code == 429 and "Retry-After" in r.headers
-    login_limiter.fails.clear()
 
 
 def test_staff_management(client, doctor, student):
@@ -120,14 +117,12 @@ def test_staff_management(client, doctor, student):
     assert uid in [x["id"] for x in client.get("/api/users?include_disabled=true", headers=dh).json()]
 
 
-def test_mrn_monotonic_and_migrations():
-    c = connect()
-    try:
-        assert c.execute("PRAGMA user_version").fetchone()[0] >= 1
+def test_mrn_monotonic_and_migrations(client):
+    with tx() as c:
+        assert schema_version(c) == len(MIGRATIONS)
         mrn = next_mrn(c)
-        assert mrn not in {r[0] for r in c.execute("SELECT mrn FROM patients")}
-        cols = {r[1] for r in c.execute("PRAGMA table_info(transcript_segments)")}
-        assert {"original_text", "edited_at"} <= cols
-    finally:
-        c.close()
-    assert isinstance(sqlite3.sqlite_version, str)
+        assert mrn not in {r["mrn"] for r in c.execute("SELECT mrn FROM patients").fetchall()}
+        row = c.execute("SELECT original_text, edited_at FROM transcript_segments LIMIT 1").fetchall()
+        assert isinstance(row, list)
+        assert c.execute("SELECT is_admin FROM users WHERE id='usr_doctor'").fetchone()["is_admin"] == 1
+    assert dialect() in ("sqlite", "postgres")

@@ -155,7 +155,7 @@ def test_ws_rejects_bad_token(client, doctor):
     import pytest
     from starlette.websockets import WebSocketDisconnect
     with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect(f"/api/consultations/{c['id']}/ws?token=bad") as ws:
+        with client.websocket_connect(f"/api/consultations/{c['id']}/ws?ticket=bad") as ws:
             ws.receive_json()
 
 

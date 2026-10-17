@@ -3,7 +3,7 @@
  * Protocol: docs/API_CONTRACT.md section 4.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { wsUrl } from '../api/client'
+import { ApiError, wsUrl } from '../api/client'
 import type { Role, Segment } from '../api/types'
 
 export interface PeerInfo {
@@ -41,6 +41,10 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
   const [interims, setInterims] = useState<Record<string, Interim>>({})
   const [chat, setChat] = useState<ChatMsg[]>([])
   const [socketState, setSocketState] = useState<'open' | 'reconnecting' | 'closed'>('reconnecting')
+  const [notice, setNotice] = useState<string | null>(null)
+  // Final transcript lines not yet confirmed by the server: resent after a reconnect (server de-duplicates).
+  const pending = useRef<Map<string, { type: 'transcript.final'; text: string; client_id: string; language: string }>>(new Map())
+  const admittedRef = useRef(false)
 
   const ws = useRef<WebSocket | null>(null)
   const pcs = useRef<Map<string, { pc: RTCPeerConnection; polite: boolean; makingOffer: boolean; ignoreOffer: boolean }>>(new Map())
@@ -55,6 +59,10 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
   const send = useCallback((msg: unknown) => {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg))
   }, [])
+  const flushPending = useCallback(() => {
+    if (!admittedRef.current) return
+    for (const m of pending.current.values()) send(m)
+  }, [send])
 
   const patchRemote = (id: string, p: Partial<RemotePeer>) =>
     setRemotes((r) => (r[id] ? { ...r, [id]: { ...r[id], ...p } } : r))
@@ -153,15 +161,19 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
         self.current = m.peer_id as string
         setSelfId(self.current)
         ice.current = (m.ice_servers as RTCIceServer[]) ?? ice.current
+        admittedRef.current = !!m.admitted
         if (m.admitted) {
           setPhase('in_call')
+          flushPending()
           // Newcomer initiates connections to everyone already in the call
           for (const p of m.peers as PeerInfo[]) ensurePeer(p)
         } else setPhase('waiting')
         break
       }
       case 'admitted':
+        admittedRef.current = true
         setPhase('in_call')
+        flushPending()
         for (const p of m.peers as PeerInfo[]) ensurePeer(p)
         break
       case 'denied':
@@ -200,6 +212,7 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
       }
       case 'transcript.final': {
         const seg = m.segment as Segment
+        pending.current.delete(seg.client_id)
         cb.current.onSegment(seg)
         setInterims((r) => {
           const n = { ...r }
@@ -208,6 +221,15 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
         })
         break
       }
+      case 'transcript.ack':
+        pending.current.delete(m.client_id as string)
+        break
+      case 'error':
+        if (m.code === 'transcript_locked') {
+          pending.current.clear()
+          setNotice(String(m.detail ?? 'The transcript is locked.'))
+        } else if (m.code === 'rate_limited') setNotice('Too many messages - slowing down.')
+        break
       case 'transcript.reload':
         cb.current.onReload()
         break
@@ -231,8 +253,27 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
     let attempt = 0
     let timer: number | undefined
     let ping: number | undefined
-    const connect = () => {
-      const sock = new WebSocket(wsUrl(`/api/consultations/${consultationId}/ws`))
+    const retry = () => {
+      setSocketState('reconnecting')
+      setPhase((p) => (p === 'in_call' || p === 'waiting' ? p : 'connecting'))
+      timer = window.setTimeout(connect, Math.min(10000, 500 * 2 ** attempt++))
+    }
+    const connect = async () => {
+      if (closedByUs.current) return
+      let url: string
+      try {
+        url = await wsUrl(`/api/consultations/${consultationId}/ws`, consultationId)
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 404)) {
+          setPhase('error')
+          setSocketState('closed')
+          return
+        }
+        retry()
+        return
+      }
+      if (closedByUs.current) return
+      const sock = new WebSocket(url)
       ws.current = sock
       sock.onopen = () => {
         attempt = 0
@@ -248,6 +289,7 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
       }
       sock.onclose = (ev) => {
         window.clearInterval(ping)
+        admittedRef.current = false
         for (const id of [...pcs.current.keys()]) dropPeer(id)
         if (ev.code === 4409) {
           setPhase('closed')
@@ -262,12 +304,10 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
           setSocketState('closed')
           return
         }
-        setSocketState('reconnecting')
-        setPhase((p) => (p === 'in_call' || p === 'waiting' ? p : 'connecting'))
-        timer = window.setTimeout(connect, Math.min(10000, 500 * 2 ** attempt++))
+        retry()
       }
     }
-    connect()
+    void connect()
     return () => {
       closedByUs.current = true
       window.clearTimeout(timer)
@@ -275,7 +315,7 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
       ws.current?.close()
       for (const id of [...pcs.current.keys()]) dropPeer(id)
     }
-  }, [consultationId, send, dropPeer])
+  }, [consultationId, send, dropPeer, flushPending])
 
   // Keep outgoing tracks in sync when local stream changes (e.g. permissions granted late)
   useEffect(() => {
@@ -317,11 +357,15 @@ export function useRoom({ consultationId, localStream, onSegment, onReload, onSt
   }, [setMedia])
 
   return {
-    phase, selfId, roster, remotes, interims, chat, socketState,
+    phase, selfId, roster, remotes, interims, chat, socketState, notice, clearNotice: () => setNotice(null),
     admit: (peer_id: string) => send({ type: 'admit', peer_id }),
     deny: (peer_id: string) => send({ type: 'deny', peer_id }),
     sendInterim: (text: string) => send({ type: 'transcript.interim', text }),
-    sendFinal: (text: string, client_id: string, language: string) => send({ type: 'transcript.final', text, client_id, language }),
+    sendFinal: (text: string, client_id: string, language: string) => {
+      const msg = { type: 'transcript.final' as const, text, client_id, language }
+      if (pending.current.size < 200) pending.current.set(client_id, msg)
+      send(msg)
+    },
     sendChat: (text: string) => send({ type: 'chat', text }),
     setMedia,
     shareScreen,

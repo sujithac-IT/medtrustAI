@@ -1,5 +1,6 @@
 """Row -> API object mappers and shared access checks."""
 import json
+from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -42,7 +43,6 @@ def consultation_out(c: dict[str, Any]) -> dict[str, Any]:
     out["join_path"] = f"/room/{c['room_code']}"
     out["meet"] = json.loads(c.get("meet_json") or "{}")
     if out["started_at"] and out["ended_at"]:
-        from datetime import datetime
         out["duration_seconds"] = int((datetime.fromisoformat(out["ended_at"]) -
                                        datetime.fromisoformat(out["started_at"])).total_seconds())
     else:
@@ -57,12 +57,19 @@ def get_consultation(cid: str) -> dict[str, Any]:
     return c
 
 
+def is_admin(user: dict[str, Any]) -> bool:
+    return user["role"] != "patient" and bool(user.get("is_admin"))
+
+
+def is_assigned(user: dict[str, Any], c: dict[str, Any]) -> bool:
+    """Named on the consultation as its attending doctor or student."""
+    return user["id"] in (c["doctor_id"], c.get("student_id"))
+
+
 def can_access_consultation(user: dict[str, Any], c: dict[str, Any]) -> bool:
-    if user["role"] == "doctor":
-        return True
-    if user["role"] == "student":
-        return True
-    return user.get("patient_id") == c["patient_id"]
+    if user["role"] == "patient":
+        return bool(user.get("patient_id")) and user.get("patient_id") == c["patient_id"]
+    return is_assigned(user, c) or is_admin(user)
 
 
 def ensure_consultation_access(user: dict[str, Any], c: dict[str, Any]) -> None:
@@ -70,9 +77,22 @@ def ensure_consultation_access(user: dict[str, Any], c: dict[str, Any]) -> None:
         raise HTTPException(403, "You are not a participant of this consultation")
 
 
+def consultation_scope(user: dict[str, Any], alias: str = "c") -> tuple[str, tuple]:
+    """SQL filter limiting consultation rows to those the user may see."""
+    if user["role"] == "patient":
+        return f"{alias}.patient_id=?", (user.get("patient_id") or "-",)
+    if is_admin(user):
+        return "1=1", ()
+    return f"({alias}.doctor_id=? OR {alias}.student_id=?)", (user["id"], user["id"])
+
+
 def ensure_patient_access(user: dict[str, Any], patient_id: str) -> None:
     if user["role"] == "patient" and user.get("patient_id") != patient_id:
         raise HTTPException(403, "Patients can only access their own record")
+
+
+def page(limit: int, offset: int) -> str:
+    return f" LIMIT {max(1, min(int(limit), 500))} OFFSET {max(0, int(offset))}"
 
 
 def segment_out(s: dict[str, Any]) -> dict[str, Any]:
@@ -91,4 +111,5 @@ def case_sheet_out(cs: dict[str, Any]) -> dict[str, Any]:
         "sections": json.loads(cs["sections_json"]), "summaries": json.loads(cs["summaries_json"] or "{}"),
         "approval": json.loads(cs["approval_json"]) if cs.get("approval_json") else None,
         "content_hash": cs.get("content_hash"), "created_at": cs["created_at"], "updated_at": cs["updated_at"],
+        "guardrails": json.loads(cs.get("guardrails_json") or "{}"),
     }

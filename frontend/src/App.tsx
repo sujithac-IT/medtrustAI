@@ -1,28 +1,32 @@
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import type { Role } from './api/types'
 import Layout from './components/Layout'
-import { FullPageSpinner } from './components/ui'
+import { FullPageSpinner, Spinner } from './components/ui'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
-import PatientsPage from './pages/PatientsPage'
-import PatientDetailPage from './pages/PatientDetailPage'
-import ConsultationsPage from './pages/ConsultationsPage'
-import ConsultationDetailPage from './pages/ConsultationDetailPage'
-import RoomPage from './pages/RoomPage'
-import CaseSheetPage from './pages/CaseSheetPage'
-import CaseSheetsPage from './pages/CaseSheetsPage'
-import SettingsPage from './pages/SettingsPage'
-import StaffPage from './pages/StaffPage'
 
-function Protected({ roles, children, bare }: { roles?: Role[]; children: ReactNode; bare?: boolean }) {
+// Route-level code splitting: the first load only ships the login + dashboard bundle,
+// which matters on slow hospital networks and low-end phones.
+const PatientsPage = lazy(() => import('./pages/PatientsPage'))
+const PatientDetailPage = lazy(() => import('./pages/PatientDetailPage'))
+const ConsultationsPage = lazy(() => import('./pages/ConsultationsPage'))
+const ConsultationDetailPage = lazy(() => import('./pages/ConsultationDetailPage'))
+const RoomPage = lazy(() => import('./pages/RoomPage'))
+const CaseSheetPage = lazy(() => import('./pages/CaseSheetPage'))
+const CaseSheetsPage = lazy(() => import('./pages/CaseSheetsPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const StaffPage = lazy(() => import('./pages/StaffPage'))
+
+function Protected({ roles, admin, children, bare }: { roles?: Role[]; admin?: boolean; children: ReactNode; bare?: boolean }) {
   const { user, loading } = useAuth()
   const loc = useLocation()
   if (loading) return <FullPageSpinner label="Restoring session" />
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />
-  return bare ? <>{children}</> : <Layout>{children}</Layout>
+  if ((roles && !roles.includes(user.role)) || (admin && !user.is_admin)) return <Navigate to="/" replace />
+  const page = <Suspense fallback={bare ? <FullPageSpinner label="Loading" /> : <Spinner />}>{children}</Suspense>
+  return bare ? page : <Layout>{page}</Layout>
 }
 
 const STAFF: Role[] = ['doctor', 'student']
@@ -39,7 +43,7 @@ export default function App() {
       <Route path="/consultations/:id" element={<Protected><ConsultationDetailPage /></Protected>} />
       <Route path="/case-sheets" element={<Protected><CaseSheetsPage /></Protected>} />
       <Route path="/case-sheets/:id" element={<Protected><CaseSheetPage /></Protected>} />
-      <Route path="/staff" element={<Protected roles={['doctor']}><StaffPage /></Protected>} />
+      <Route path="/staff" element={<Protected roles={['doctor']} admin><StaffPage /></Protected>} />
       <Route path="/settings" element={<Protected><SettingsPage /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

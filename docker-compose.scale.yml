@@ -1,0 +1,35 @@
+# Horizontal scale-out overlay: shared PostgreSQL + Redis, stateless API replicas behind nginx.
+#   export JWT_SECRET=$(openssl rand -base64 48)
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --scale backend=3
+# Every replica must share JWT_SECRET; the API refuses to start with DATABASE_URL and no secret.
+services:
+  backend:
+    environment:
+      DATABASE_URL: postgresql://medtrust:${POSTGRES_PASSWORD:-medtrust}@postgres:5432/medtrust
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: medtrust
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medtrust}
+      POSTGRES_DB: medtrust
+    volumes: [medtrust-pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medtrust"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb"]
+    restart: unless-stopped
+
+volumes:
+  medtrust-pg:

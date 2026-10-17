@@ -28,8 +28,11 @@ export default function Layout({ children }: { children: ReactNode }) {
     let ws: WebSocket | null = null
     let timer: number | undefined
     let stopped = false
-    const connect = () => {
-      ws = new WebSocket(wsUrl('/api/ws/staff'))
+    const connect = async () => {
+      let url: string
+      try { url = await wsUrl('/api/ws/staff') } catch { if (!stopped) timer = window.setTimeout(connect, 15000); return }
+      if (stopped) return
+      ws = new WebSocket(url)
       ws.onmessage = (e) => {
         const m = JSON.parse(e.data)
         if (m.type === 'waiting') {
@@ -41,7 +44,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         if (!stopped && e.code !== 4401 && e.code !== 4403) timer = window.setTimeout(connect, 4000)
       }
     }
-    connect()
+    void connect()
     return () => {
       stopped = true
       window.clearTimeout(timer)
@@ -57,19 +60,19 @@ export default function Layout({ children }: { children: ReactNode }) {
     { to: '/patients', label: 'Patients', icon: Users, show: staff },
     { to: user.patient_id ? `/patients/${user.patient_id}` : '/', label: 'My medical history', icon: ClipboardList, show: !staff },
     { to: '/case-sheets', label: staff ? 'Case sheets' : 'My case sheets', icon: FileText, show: true },
-    { to: '/staff', label: 'Clinical staff', icon: ShieldCheck, show: user.role === 'doctor' },
+    { to: '/staff', label: 'Clinical staff', icon: ShieldCheck, show: !!user.is_admin },
     { to: '/settings', label: 'Settings', icon: Settings, show: true },
   ]
   return (
     <div className="shell">
       <div className="mobile-bar no-print">
-        <div className="row"><b style={{ fontFamily: 'var(--serif)' }}>MedTrust AI</b></div>
-        <button className="btn ghost icon" style={{ color: 'var(--paper)', borderColor: 'rgba(255,255,255,.2)' }} onClick={() => setOpen(!open)} aria-label="Menu"><Menu size={18} /></button>
+        <div className="row"><BrandMark /><b>MedTrust AI</b></div>
+        <button className="btn ghost icon" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Menu size={18} /></button>
       </div>
       <aside className={`side${open ? ' open' : ''}`}>
         <div className="brand">
           <BrandMark />
-          <div><b>MedTrust AI</b><span>Clinical teleconsult</span></div>
+          <div><b>MedTrust AI</b><span>Teaching hospital records</span></div>
         </div>
         {staff && (
           <button className="btn signal" style={{ marginBottom: 14 }} onClick={() => nav('/consultations?new=1')}>
@@ -86,14 +89,14 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="side-foot">
           <Avatar name={user.name} />
           <div className="who"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}{user.registration_number ? ` - ${user.registration_number}` : ''}</span></div>
-          <button className="btn icon" style={{ background: 'transparent', borderColor: 'rgba(255,255,255,.18)' }} onClick={() => { logout(); nav('/login') }} aria-label="Sign out" title="Sign out">
+          <button className="btn ghost icon" onClick={() => { logout(); nav('/login') }} aria-label="Sign out" title="Sign out">
             <LogOut size={16} />
           </button>
         </div>
       </aside>
       <main className="main">
         {toast && (
-          <div className="alert warn no-print" style={{ position: 'fixed', right: 20, top: 20, zIndex: 80, maxWidth: 380, boxShadow: 'var(--shadow)' }}>
+          <div className="alert info no-print" role="status" style={{ position: 'fixed', right: 20, top: 20, zIndex: 80, maxWidth: 380, boxShadow: 'var(--lift)' }}>
             <span style={{ flex: 1 }}>{toast}</span>
             <button className="btn sm" onClick={() => { setToast(null); nav('/consultations?status=live') }}>View</button>
           </div>

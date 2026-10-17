@@ -1,3 +1,6 @@
+# Default: one small API container + nginx, SQLite on a volume (~100 MB RAM total).
+#   docker compose up --build                      -> http://localhost:3000
+# Scale-out (PostgreSQL + Redis + N API replicas): see docker-compose.scale.yml
 services:
   backend:
     build: ./backend
@@ -10,6 +13,7 @@ services:
       FRONTEND_DIST: /nonexistent
     volumes: [medtrust-data:/data]
     restart: unless-stopped
+    mem_limit: 256m
 
   frontend:
     build:
@@ -22,6 +26,7 @@ services:
     ports: ["3000:80"]
     depends_on: [backend]
     restart: unless-stopped
+    mem_limit: 64m
 
 volumes:
   medtrust-data:

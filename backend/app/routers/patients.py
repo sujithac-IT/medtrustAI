@@ -1,24 +1,28 @@
 import json
-import sqlite3
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..db import audit, many, new_id, next_mrn, now_iso, one, tx
+from ..db import IntegrityError, audit, many, new_id, next_mrn, now_iso, one, tx
 from ..schemas import PatientIn, PatientPatch
 from ..security import current_user, staff_only
-from ..serializers import CONSULT_SQL, consultation_out, ensure_patient_access, patient_out
+from ..serializers import CONSULT_SQL, consultation_out, consultation_scope, ensure_patient_access, page, patient_out
+
+log = logging.getLogger("medtrust.patients")
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 
 
 @router.get("")
-def list_patients(q: str | None = Query(None, max_length=80), user: dict = Depends(staff_only)):
+def list_patients(q: str | None = Query(None, max_length=80), limit: int = Query(100, ge=1, le=500),
+                  offset: int = Query(0, ge=0), user: dict = Depends(staff_only)):
     if q:
-        like = f"%{q.strip()}%"
-        rows = many("""SELECT * FROM patients WHERE first_name || ' ' || last_name LIKE ? OR mrn LIKE ?
-                       OR phone LIKE ? OR email LIKE ? ORDER BY updated_at DESC""", (like, like, like, like))
+        like = "%" + q.strip().lower().replace("\\", "").replace("%", "").replace("_", "") + "%"
+        rows = many("""SELECT * FROM patients WHERE lower(first_name || ' ' || last_name) LIKE ? OR lower(mrn) LIKE ?
+                       OR phone LIKE ? OR lower(email) LIKE ? ORDER BY updated_at DESC""" + page(limit, offset),
+                    (like, like, like, like))
     else:
-        rows = many("SELECT * FROM patients ORDER BY updated_at DESC")
+        rows = many("SELECT * FROM patients ORDER BY updated_at DESC" + page(limit, offset))
     return [patient_out(r) for r in rows]
 
 
@@ -37,8 +41,9 @@ def create_patient(body: PatientIn, user: dict = Depends(staff_only)):
                        body.emergency_contact_name, body.emergency_contact_phone, json.dumps(body.allergies),
                        json.dumps(body.conditions), user["id"], ts, ts))
             audit(c, user["id"], "create", "patient", pid)
-    except sqlite3.IntegrityError as e:
-        raise HTTPException(409, f"Could not create patient: {e}")
+    except IntegrityError as e:
+        log.warning("patient create conflict: %s", type(e).__name__)
+        raise HTTPException(409, "Could not create patient: a conflicting record exists")
     return patient_out(one("SELECT * FROM patients WHERE id=?", (pid,)))  # type: ignore[arg-type]
 
 
@@ -63,7 +68,7 @@ def update_patient(pid: str, body: PatientPatch, user: dict = Depends(staff_only
             vals.append(json.dumps([t.strip() for t in (v or []) if t.strip()]))
         else:
             cols.append(f"{k}=?")
-            vals.append(v)
+            vals.append(v.strip() if isinstance(v, str) else v)
     if cols:
         with tx() as c:
             c.execute(f"UPDATE patients SET {', '.join(cols)}, updated_at=? WHERE id=?", (*vals, now_iso(), pid))
@@ -77,7 +82,9 @@ def patient_history(pid: str, user: dict = Depends(current_user)):
     p = one("SELECT * FROM patients WHERE id=?", (pid,))
     if not p:
         raise HTTPException(404, "Patient not found")
-    rows = many(CONSULT_SQL + " WHERE c.patient_id=? ORDER BY c.scheduled_at DESC", (pid,))
+    scope, params = consultation_scope(user)
+    rows = many(CONSULT_SQL + f" WHERE c.patient_id=? AND {scope} ORDER BY c.scheduled_at DESC LIMIT 500",
+                (pid, *params))
     items = [consultation_out(r) for r in rows]
     if user["role"] == "patient":
         for i in items:

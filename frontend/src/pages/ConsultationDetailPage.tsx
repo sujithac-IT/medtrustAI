@@ -106,7 +106,7 @@ function ManageModal({ c, onClose, onSaved }: { c: Consultation; onClose: () => 
             {students.map((s) => <option key={s.id} value={s.id}>{s.name}{s.registration_number ? ` (${s.registration_number})` : ''}</option>)}
           </select></label>
         {c.status === 'scheduled' && (
-          <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--line-2)', paddingTop: 12 }}>
+          <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--rule-2)', paddingTop: 12 }}>
             <b className="small">Cancel this consultation</b>
             <input className="input" placeholder="Reason (shown to the patient)" maxLength={300} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
             <button className="btn danger" disabled={busy} onClick={() => { if (confirm('Cancel this consultation? The patient will see it as cancelled.')) void submit({ status: 'cancelled', cancel_reason: cancelReason || undefined }) }}>
@@ -155,9 +155,12 @@ export default function ConsultationDetailPage() {
   if (!c) return <Spinner />
 
   const generate = () => run('gen', async () => {
-    const sheet = await api.generateCaseSheet(c.id)
+    const overwrite = !!c.case_sheet_id
+    if (overwrite && !confirm('Regenerate the case sheet from the transcript? Every edit made to the current draft will be replaced. The old version stays in the audit trail.')) return
+    const sheet = await api.generateCaseSheet(c.id, overwrite)
     nav(`/case-sheets/${sheet.id}`)
   })
+  const isAttending = user?.id === c.doctor_id || !!user?.is_admin
   const addNote = (e: FormEvent) => {
     e.preventDefault()
     if (!note.text.trim()) return
@@ -215,7 +218,7 @@ export default function ConsultationDetailPage() {
         </div>
         <div className="row wrap">
           {(c.status === 'scheduled' || c.status === 'live') && <Link className="btn signal" to={c.join_path}><Video size={16} /> Join video room</Link>}
-          {user?.role === 'doctor' && c.status === 'live' && (
+          {user?.role === 'doctor' && isAttending && c.status === 'live' && (
             <button className="btn danger" disabled={!!busy} onClick={() => run('end', async () => setC(await api.endConsultation(c.id)))}><PhoneOff size={16} /> End consultation</button>
           )}
           {c.case_sheet_id && <Link className="btn ghost" to={`/case-sheets/${c.case_sheet_id}`}><FileText size={16} /> Open case sheet</Link>}
@@ -246,7 +249,7 @@ export default function ConsultationDetailPage() {
           </div>
           <div className="transcript"><TranscriptList segments={segments} actions={segActions} /></div>
           {editable && (
-            <form onSubmit={addNote} className="row" style={{ padding: 14, borderTop: '1px solid var(--line-2)' }}>
+            <form onSubmit={addNote} className="row" style={{ padding: 14, borderTop: '1px solid var(--rule-2)' }}>
               <select className="input" style={{ width: 130 }} value={note.role} onChange={(e) => setNote({ ...note, role: e.target.value as Role })} aria-label="Speaker">
                 <option value="doctor">Doctor</option><option value="student">Student</option><option value="patient">Patient</option>
               </select>
@@ -259,9 +262,9 @@ export default function ConsultationDetailPage() {
         <div className="stack">
           {staff && (
             <section className="card card-pad stack">
-              <div className="row"><Sparkles size={18} color="var(--signal)" /><h3>AI case sheet</h3></div>
+              <div className="row"><Sparkles size={18} color="var(--scrub)" /><h3>AI case sheet</h3></div>
               <p className="muted small" style={{ margin: 0 }}>
-                Gemini extracts the 17 clinical sections from this transcript. Anything not said is listed under Missing Information - nothing is invented.
+                The 17 clinical sections are extracted from this transcript. Every AI-suggested fact is checked against what was actually said; unsupported items are removed and flagged for review.
               </p>
               {approved ? <Alert kind="success">The case sheet is approved and locked.</Alert> : c.status === 'cancelled' ? null : (
                 <button className="btn signal" disabled={!!busy || !segments.length} onClick={generate}>

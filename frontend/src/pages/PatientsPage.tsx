@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Search, UserPlus, Users } from 'lucide-react'
 import { api } from '../api/client'
 import type { Patient } from '../api/types'
@@ -137,7 +137,7 @@ export default function PatientsPage() {
         <button className="btn signal" onClick={() => setCreating(true)}><UserPlus size={16} /> New patient</button>
       </div>
       <div className="row" style={{ maxWidth: 480, position: 'relative' }}>
-        <Search size={16} style={{ position: 'absolute', left: 12, color: 'var(--ink-soft)' }} />
+        <Search size={16} style={{ position: 'absolute', left: 12, color: 'var(--muted)' }} />
         <input className="input" style={{ paddingLeft: 36 }} placeholder="Search patients" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search patients" />
       </div>
       {error && <Alert kind="error">{error}</Alert>}
@@ -148,7 +148,7 @@ export default function PatientsPage() {
             <tbody>
               {items.map((p) => (
                 <tr key={p.id} className="click" onClick={() => nav(`/patients/${p.id}`)}>
-                  <td><b>{p.full_name}</b>{p.conditions.length > 0 && <div className="muted small">{p.conditions.join(', ')}</div>}</td>
+                  <td><Link to={`/patients/${p.id}`} onClick={(e) => e.stopPropagation()} style={{ fontWeight: 700, textDecoration: 'none' }}>{p.full_name}</Link>{p.conditions.length > 0 && <div className="muted small">{p.conditions.join(', ')}</div>}</td>
                   <td className="mono small">{p.mrn}</td>
                   <td>{p.age ?? '-'} / {p.gender[0]}</td>
                   <td className="small">{p.phone}</td>

@@ -5,6 +5,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["DATABASE_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
+# Run the same suite against PostgreSQL/Redis by exporting TEST_DATABASE_URL / TEST_REDIS_URL.
+if os.environ.get("TEST_DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+    os.environ.setdefault("JWT_SECRET", "test-secret-" + "x" * 40)
+if os.environ.get("TEST_REDIS_URL"):
+    os.environ["REDIS_URL"] = os.environ["TEST_REDIS_URL"]
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["GOOGLE_REFRESH_TOKEN"] = ""
 os.environ["DEMO_MODE"] = "true"
@@ -18,7 +24,18 @@ from app.main import app  # noqa: E402
 
 @pytest.fixture(scope="session")
 def client():
-    return TestClient(app)
+    with TestClient(app) as c:  # runs the lifespan (migrations, realtime hub)
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    from app.ratelimit import limiter
+    yield
+    try:
+        limiter.clear()
+    except Exception:
+        pass
 
 
 def _login(client, role):
