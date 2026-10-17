@@ -94,7 +94,7 @@ export const api = {
   changePassword: (current_password: string, new_password: string) =>
     post<Session>('/api/auth/password', { current_password, new_password }),
   createStaff: (b: Record<string, unknown>) => post<User>('/api/users', b),
-  updateStaff: (id: string, b: { disabled?: boolean; designation?: string; specialization?: string }) => patch<User>(`/api/users/${id}`, b),
+  updateStaff: (id: string, b: { disabled?: boolean; is_admin?: boolean; designation?: string; specialization?: string }) => patch<User>(`/api/users/${id}`, b),
   allStaff: () => get<User[]>('/api/users?include_disabled=true'),
   dashboard: () => get<DashboardData>('/api/dashboard'),
   staff: (role?: Role) => get<User[]>(`/api/users${role ? `?role=${role}` : ''}`),
@@ -124,7 +124,9 @@ export const api = {
   transcriptText: (cid: string) => request<string>('GET', `/api/consultations/${cid}/transcript.txt`, undefined, true),
   importGoogle: (id: string) => post<{ imported: number; total_entries: number }>(`/api/consultations/${id}/transcript/import-google`),
 
-  generateCaseSheet: (cid: string) => post<CaseSheet>(`/api/consultations/${cid}/case-sheet`),
+  generateCaseSheet: (cid: string, overwrite = false) =>
+    post<CaseSheet>(`/api/consultations/${cid}/case-sheet${overwrite ? '?overwrite=true' : ''}`),
+  wsTicket: (consultation_id?: string) => post<{ ticket: string }>('/api/auth/ws-ticket', consultation_id ? { consultation_id } : {}),
   caseSheets: (params = '') => get<CaseSheetListItem[]>(`/api/case-sheets${params}`),
   caseSheet: (id: string) => get<CaseSheet>(`/api/case-sheets/${id}`),
   updateCaseSheet: (id: string, version: number, sections: Partial<Sections>) =>
@@ -144,7 +146,12 @@ export interface DashboardData {
   past?: Consultation[]
 }
 
-export function wsUrl(path: string): string {
+/**
+ * WebSocket URL with a one-minute ticket. The long-lived session token never appears in a URL
+ * (URLs are written to proxy and server access logs).
+ */
+export async function wsUrl(path: string, consultationId?: string): Promise<string> {
+  const { ticket } = await api.wsTicket(consultationId)
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(tokenStore.get() ?? '')}`
+  return `${proto}://${location.host}${path}${path.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`
 }

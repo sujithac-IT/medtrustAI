@@ -35,6 +35,13 @@ export default function StaffPage() {
       setFormErr(err instanceof Error ? err.message : String(err))
     } finally { setBusy(false) }
   }
+  const toggleAdmin = async (u: User) => {
+    if (!confirm(u.is_admin ? `Remove administrator rights from ${u.name}?` : `Make ${u.name} a hospital administrator? Administrators can see every consultation and manage staff accounts.`)) return
+    try {
+      const r = await api.updateStaff(u.id, { is_admin: !u.is_admin })
+      setItems((xs) => xs?.map((x) => (x.id === r.id ? r : x)) ?? null)
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+  }
   const toggle = async (u: User) => {
     if (!u.disabled && !confirm(`Disable ${u.name}? They will be signed out immediately.`)) return
     try {
@@ -61,7 +68,9 @@ export default function StaffPage() {
               {(u.designation || u.specialization) && <div className="small">{[u.designation, u.specialization].filter(Boolean).join(' - ')}</div>}
             </div>
             <RoleBadge role={u.role} />
+            {u.is_admin && <span className="badge ok">Admin</span>}
             {u.disabled && <span className="badge danger">Disabled</span>}
+            {u.id !== user?.id && u.role === 'doctor' && !u.disabled && <button className="btn sm ghost" onClick={() => toggleAdmin(u)}>{u.is_admin ? 'Remove admin' : 'Make admin'}</button>}
             {u.id !== user?.id && <button className="btn sm ghost" onClick={() => toggle(u)}>{u.disabled ? 'Re-enable' : 'Disable'}</button>}
           </div>
         ))}
@@ -76,7 +85,7 @@ export default function StaffPage() {
             </div>
             <label className="field"><span>Full name</span><input className="input" required minLength={2} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
             <label className="field"><span>Email</span><input className="input" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
-            <label className="field"><span>Temporary password</span><input className="input" type="text" required minLength={8} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
+            <label className="field"><span>Temporary password</span><input className="input" type="text" required minLength={8} autoComplete="new-password" placeholder="8+ characters with letters and a digit" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
             <label className="field"><span>{f.role === 'doctor' ? 'Medical council registration no.' : 'Student ID'}</span><input className="input" required={f.role === 'doctor'} value={f.registration_number} onChange={(e) => setF({ ...f, registration_number: e.target.value })} /></label>
             <label className="field"><span>Designation</span><input className="input" value={f.designation} onChange={(e) => setF({ ...f, designation: e.target.value })} /></label>
             <label className="field"><span>Specialization / year</span><input className="input" value={f.specialization} onChange={(e) => setF({ ...f, specialization: e.target.value })} /></label>

@@ -1,7 +1,8 @@
 # MedTrust AI - API Contract (v3)
 
 Base URL: same origin, prefix `/api`. JSON everywhere. Interactive OpenAPI: `/docs`.
-Auth: `Authorization: Bearer <jwt>` (WebSockets: `?token=<jwt>`). Errors: `{"detail": string | ValidationError[]}`.
+Auth: `Authorization: Bearer <jwt>`. WebSockets take a one-minute ticket from `POST /auth/ws-ticket` as `?ticket=` (session tokens never go in URLs).
+Access: patients see only their own records; doctors and students see consultations they are assigned to (attending doctor / student); administrators (`is_admin`) see all. Pagination: list endpoints take `limit` (default 100, max 500) and `offset`. Errors: `{"detail": string | ValidationError[]}`.
 Roles: `doctor`, `student` (together "staff"), `patient`.
 
 ## 1. Auth
@@ -11,10 +12,11 @@ Roles: `doctor`, `student` (together "staff"), `patient`.
 | POST | /auth/login | public | `{email, password}` | `{token, user}`; 401 bad credentials; 403 account disabled; 429 + `Retry-After` after 5 failures/email or 50/IP within 300 s |
 | POST | /auth/demo | public (DEMO_MODE) | `{role}` | `{token, user}`; 403 if disabled |
 | POST | /auth/register | public | `{email, password>=8, name, role, invite_code?, registration_number?, date_of_birth?, gender?, phone?}` | 201 `{token, user}`; 403 bad invite, 409 email exists, 422 |
-| POST | /auth/firebase | public | `{id_token, role}` | `{token, user}`; 401 invalid token |
+| POST | /auth/firebase | public | `{id_token, role}` | `{token, user}`; 401 invalid token; 403 account disabled |
+| POST | /auth/ws-ticket | any | `{consultation_id?}` | `{ticket, expires_in: 60}`; scoped to that consultation, or to staff notifications when omitted; 403 if not a participant |
 | GET | /auth/me | any | - | `User` |
 | PATCH | /auth/me | any | `{name?, phone?, specialization?, designation?}` | `User` |
-| POST | /auth/password | any | `{current_password, new_password>=8}` | `{token, user}`; 400 wrong current password; 422 if unchanged. All previously issued tokens become invalid (JWT carries a password fingerprint `pwv`). |
+| POST | /auth/password | any | `{current_password, new_password}` (8+ chars, letters and a digit, not common, not your email) | `{token, user}`; 400 wrong current password; 422 if unchanged. All previously issued tokens become invalid (JWT carries a password fingerprint `pwv`). |
 
 Tokens of disabled users are rejected with 401.
 
@@ -54,8 +56,9 @@ Tokens of disabled users are rejected with 401.
 `Consultation = {id, cancel_reason?, room_code, join_path, patient_id, patient_name, patient_mrn, doctor_id, doctor_name, doctor_specialization, student_id?, student_name?, reason?, scheduled_at, status: scheduled|live|completed|cancelled, started_at?, ended_at?, duration_seconds?, case_sheet_id?, case_sheet_status?: draft|approved, segment_count, meet: {provider: in_app|google_meet, meeting_uri?, meeting_code?, space_name?, calendar_html_link?, google_error?}}`
 `Segment = {id, client_id, speaker_role, speaker_user_id?, speaker_name, text, language, offset_ms, source: live|manual|demo|google_meet, created_at, edited, original_text?, edited_at?}`
 
-## 4. Realtime: `WS /api/consultations/{id}/ws?token=`
-Close codes: 4401 bad token, 4403 not a participant, 4404 not found, 4409 consultation closed.
+## 4. Realtime: `WS /api/consultations/{id}/ws?ticket=`
+Close codes: 4401 bad/expired ticket or account disabled, 4403 not a participant, 4404 not found, 4409 consultation closed (also sent to everyone when the doctor ends or cancels), 1009 message > 64 KB.
+Assigned staff are admitted directly; patients and observing administrators wait in the lobby. A patient admitted once is re-admitted automatically after a reconnect. Inbound messages are rate limited per socket (`{type:"error", code:"rate_limited"}`). `transcript.final` is refused with `{type:"error", code:"transcript_locked"}` once the case sheet is signed or the consultation has ended; a duplicate `client_id` is answered with `{type:"transcript.ack", client_id}` so clients can safely resend after a reconnect.
 Staff are admitted immediately; patients enter the waiting lobby.
 
 Server -> client
@@ -82,20 +85,20 @@ WebRTC: full mesh, "perfect negotiation". The newcomer creates the connections t
 
 `Peer = {peer_id, user_id, name, role, admitted, media}`
 
-Staff notifications: `WS /api/ws/staff?token=` -> `{type: "waiting", consultation_id, name}`.
+Staff notifications: `WS /api/ws/staff?ticket=` -> `{type: "waiting", consultation_id, name}`, delivered only to that consultation's doctor/student and administrators.
 
 ## 5. Case sheets
 | Method | Path | Who | Notes |
 |---|---|---|---|
-| POST | /consultations/{id}/case-sheet | staff | generate or regenerate; 201 `CaseSheet`; 422 empty transcript; 409 approved |
+| POST | /consultations/{id}/case-sheet?overwrite= | assigned staff | generate; 201 `CaseSheet`; 422 empty transcript; 409 approved, or a draft exists and `overwrite=true` was not sent; 429 after 20 AI calls / 10 min per user |
 | GET | /case-sheets?status=&patient_id= | any (patients: own approved) | `CaseSheetListItem[]` |
 | GET | /case-sheets/{id} | staff, own patient if approved | `CaseSheet + section_titles + section_order` |
 | PATCH | /case-sheets/{id} | staff | `{version, sections: Partial<Sections>}`; 409 version mismatch or approved |
 | POST | /case-sheets/{id}/summaries | staff | regenerate multilingual summaries |
-| POST | /case-sheets/{id}/approve | doctor | `{version, confirm_reviewed: true}`; 409 if stale/approved |
+| POST | /case-sheets/{id}/approve | attending doctor only | `{version, confirm_reviewed: true}`; rebuilds the patient summary from the signed sections; the hash covers sections + summary; 409 if stale/approved or the consultation is still live; marks a scheduled consultation completed |
 | GET | /case-sheets/{id}/audit | staff | `[{at, action, detail, user_name, user_role}]` |
 
-`CaseSheet = {id, consultation_id, patient_id, status: draft|approved, version, source: gemini|local, sections: Sections, summaries: {machine_translated, source, texts: {en,ta,hi,te,ml,kn}}, approval?: {approved_by: User, approved_at, content_hash: "sha256:...", statement}, content_hash?, created_at, updated_at}`
+`CaseSheet = {id, consultation_id, patient_id, status: draft|approved, version, source: gemini|local, sections: Sections, summaries: {machine_translated, source, texts: {en,ta,hi,te,ml,kn}}, approval?: {approved_by: User, approved_at, content_hash: "sha256:...", version, statement}, content_hash?, guardrails: {removed[], flagged[], grounding_checked, transcript_truncated}, integrity_ok?: boolean (signed sheets: stored content re-hashed and compared), attending_doctor_id, created_at, updated_at}`
 
 `Sections` (17 keys, fixed order):
 `patient_info{}`, `chief_complaint`, `history_of_present_illness`, `symptoms[{name, severity, duration, notes}]`, `duration`, `past_medical_history[]`, `medications[{name, dose, frequency, route, duration, instructions}]`, `allergies[]`, `family_history`, `social_history`, `doctor_observations{summary, vitals{blood_pressure, pulse, temperature, spo2, respiratory_rate, weight}}`, `investigations[]`, `assessment`, `treatment_plan`, `follow_up`, `missing_information[]`, `uncertain_information[]`.
@@ -104,7 +107,7 @@ Staff notifications: `WS /api/ws/staff?token=` -> `{type: "waiting", consultatio
 | GET /health | public | `{status, gemini, google_meet, firebase, demo_mode, turn}` |
 |---|---|---|
 | GET /config | public | hospital name, languages, features |
-| GET /users?role=&include_disabled= | staff | staff directory |
-| POST /users | doctor | create doctor/student `{email, password>=8, name, role, registration_number? (required for doctors), specialization?, designation?}` -> 201; 409 email exists; 422 |
-| PATCH /users/{id} | doctor | `{disabled?, specialization?, designation?}`; 404 unknown; 422 when disabling yourself |
+| GET /users?role=&include_disabled= | staff | staff directory (`include_disabled` honoured for administrators only) |
+| POST /users | administrator | create doctor/student `{email, password>=8, name, role, registration_number? (required for doctors), specialization?, designation?}` -> 201; 409 email exists; 422 |
+| PATCH /users/{id} | administrator | `{disabled?, is_admin?, specialization?, designation?}`; disabling closes the user's open sockets; 404 unknown; 422 when disabling yourself, removing your own admin role, or making a student an admin |
 | GET /dashboard | any | staff: `{stats, live, upcoming, awaiting_approval, recent_approved}`; patient: `{upcoming, past}` |

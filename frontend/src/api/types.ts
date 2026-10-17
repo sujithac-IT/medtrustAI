@@ -11,6 +11,7 @@ export interface User {
   patient_id?: string | null
   phone?: string | null
   disabled?: boolean
+  is_admin?: boolean
 }
 
 export interface Patient {
@@ -68,6 +69,7 @@ export interface Consultation {
   meet: MeetInfo
   presence?: { admitted: number; waiting: number }
   ice_servers?: RTCIceServer[]
+  you_are_assigned?: boolean
 }
 
 export interface Segment {
@@ -132,6 +134,9 @@ export interface CaseSheet {
   updated_at: string
   section_titles: Record<string, string>
   section_order: (keyof Sections)[]
+  attending_doctor_id?: string
+  integrity_ok?: boolean
+  guardrails?: { removed?: string[]; flagged?: string[]; grounding_checked?: boolean; transcript_truncated?: boolean }
 }
 
 export interface CaseSheetListItem {

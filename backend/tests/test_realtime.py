@@ -50,10 +50,14 @@ def test_waiting_room_signalling_and_transcript(server):
         p = httpx.post(server + "/api/auth/demo", json={"role": "patient"}).json()
         c = httpx.post(server + "/api/consultations", headers={"Authorization": f"Bearer {d}"},
                        json={"patient_id": p["user"]["patient_id"]}).json()
-        url = server.replace("http", "ws") + f"/api/consultations/{c['id']}/ws?token="
-        async with websockets.connect(url + d) as dws:
+        url = server.replace("http", "ws") + f"/api/consultations/{c['id']}/ws?ticket="
+
+        def ticket(tok):
+            return httpx.post(server + "/api/auth/ws-ticket", headers={"Authorization": f"Bearer {tok}"},
+                              json={"consultation_id": c["id"]}).json()["ticket"]
+        async with websockets.connect(url + ticket(d)) as dws:
             dw = await _until(dws, "welcome")
-            async with websockets.connect(url + p["token"]) as pws:
+            async with websockets.connect(url + ticket(p["token"])) as pws:
                 pw = await _until(pws, "welcome")
                 assert pw["admitted"] is False
                 # waiting peer cannot signal

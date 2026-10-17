@@ -1,8 +1,9 @@
-"""Password hashing, JWT sessions, Firebase ID-token verification, role guards."""
+"""Password hashing, JWT sessions, WebSocket tickets, Firebase ID-token verification, role guards."""
 import base64
 import hashlib
 import hmac
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -16,7 +17,11 @@ from .config import get_settings
 from .db import one
 
 PBKDF2_ITER = 200_000
+ISSUER = "medtrust"
+WS_TICKET_TTL_S = 60
 bearer = HTTPBearer(auto_error=False)
+_COMMON_PASSWORDS = {"password", "password1", "12345678", "123456789", "qwerty123", "iloveyou", "11111111",
+                     "abc12345", "medtrust", "welcome1", "admin123", "letmein1", "password123"}
 
 
 def hash_password(password: str) -> str:
@@ -36,34 +41,27 @@ def verify_password(password: str, stored: str | None) -> bool:
         return False
 
 
-def issue_token(user: dict[str, Any]) -> str:
-    s = get_settings()
-    now = datetime.now(timezone.utc)
-    payload = {"sub": user["id"], "role": user["role"], "iat": now, "pwv": _pw_version(user),
-               "exp": now + timedelta(hours=s.jwt_ttl_hours)}
-    return jwt.encode(payload, s.jwt_secret, algorithm="HS256")
+# Spend the same time on unknown emails as on wrong passwords, so login timing does not reveal accounts.
+_DUMMY_HASH = hash_password(os.urandom(8).hex())
 
 
-def public_user(u: dict[str, Any]) -> dict[str, Any]:
-    out = {k: u.get(k) for k in ("id", "email", "name", "role", "registration_number", "specialization",
-                                 "designation", "patient_id", "phone")}
-    out["disabled"] = bool(u.get("disabled"))
-    return out
+def verify_password_constant_time(password: str, stored: str | None) -> bool:
+    return verify_password(password, stored or _DUMMY_HASH) and bool(stored)
 
 
-def user_from_token(token: str) -> dict[str, Any]:
-    try:
-        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
-    except jwt.PyJWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired session")
-    user = one("SELECT * FROM users WHERE id=?", (payload["sub"],))
-    if not user:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User no longer exists")
-    if user.get("disabled"):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account has been disabled")
-    if payload.get("pwv") is not None and payload["pwv"] != _pw_version(user):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Password changed - please sign in again")
-    return user
+def password_problem(password: str, email: str = "", name: str = "") -> str | None:
+    """Minimal policy: length, not a common password, not the email/name, letters and digits."""
+    p = password.lower()
+    if len(password) < 8:
+        return "Password must be at least 8 characters"
+    if p in _COMMON_PASSWORDS:
+        return "This password is too common"
+    local = email.split("@")[0].lower()
+    if (local and len(local) >= 4 and local in p) or (name and name.lower().replace(" ", "") == p):
+        return "Password must not contain your email or name"
+    if not (re.search(r"[A-Za-z]", password) and re.search(r"\d", password)):
+        return "Password must contain letters and at least one digit"
+    return None
 
 
 def _pw_version(user: dict[str, Any]) -> str:
@@ -71,42 +69,63 @@ def _pw_version(user: dict[str, Any]) -> str:
     return hashlib.sha256((user.get("password_hash") or "none").encode()).hexdigest()[:10]
 
 
-class LoginLimiter:
-    """In-memory sliding-window limiter for failed logins (per email and per client IP)."""
-
-    def __init__(self, max_failures: int = 5, window_s: int = 300) -> None:
-        self.max, self.window = max_failures, window_s
-        self.fails: dict[str, list[float]] = {}
-
-    def _recent(self, key: str) -> list[float]:
-        now = time.time()
-        hits = [t for t in self.fails.get(key, []) if now - t < self.window]
-        self.fails[key] = hits
-        return hits
-
-    def limit(self, key: str) -> int:
-        # Hospitals sit behind shared NAT, so the per-IP budget is much larger than the per-account one.
-        return self.max * 10 if key.startswith("ip:") else self.max
-
-    def check(self, *keys: str) -> None:
-        for k in keys:
-            hits = self._recent(k)
-            if len(hits) >= self.limit(k):
-                retry = int(self.window - (time.time() - hits[0])) + 1
-                raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
-                                    f"Too many failed sign-in attempts. Try again in {retry} seconds.",
-                                    headers={"Retry-After": str(retry)})
-
-    def fail(self, *keys: str) -> None:
-        for k in keys:
-            self.fails.setdefault(k, []).append(time.time())
-
-    def reset(self, *keys: str) -> None:
-        for k in keys:
-            self.fails.pop(k, None)
+def _encode(payload: dict[str, Any]) -> str:
+    return jwt.encode(payload, get_settings().jwt_secret, algorithm="HS256")
 
 
-login_limiter = LoginLimiter()
+def issue_token(user: dict[str, Any]) -> str:
+    s = get_settings()
+    now = datetime.now(timezone.utc)
+    return _encode({"sub": user["id"], "role": user["role"], "typ": "access", "iss": ISSUER, "iat": now,
+                    "pwv": _pw_version(user), "exp": now + timedelta(hours=s.jwt_ttl_hours)})
+
+
+def issue_ws_ticket(user: dict[str, Any], scope: str) -> str:
+    """Short-lived token for one WebSocket connect, so long-lived session tokens never travel in URLs."""
+    now = datetime.now(timezone.utc)
+    return _encode({"sub": user["id"], "typ": "ws", "scope": scope, "iss": ISSUER, "iat": now,
+                    "pwv": _pw_version(user), "exp": now + timedelta(seconds=WS_TICKET_TTL_S)})
+
+
+def public_user(u: dict[str, Any]) -> dict[str, Any]:
+    out = {k: u.get(k) for k in ("id", "email", "name", "role", "registration_number", "specialization",
+                                 "designation", "patient_id", "phone")}
+    out["disabled"] = bool(u.get("disabled"))
+    out["is_admin"] = bool(u.get("is_admin"))
+    return out
+
+
+def _decode(token: str, typ: str) -> dict[str, Any]:
+    try:
+        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"], issuer=ISSUER,
+                             options={"require": ["exp", "sub", "typ", "pwv", "iss"]})
+    except jwt.PyJWTError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired session")
+    if payload.get("typ") != typ:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired session")
+    return payload
+
+
+def _load_user(payload: dict[str, Any]) -> dict[str, Any]:
+    user = one("SELECT * FROM users WHERE id=?", (payload["sub"],))
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User no longer exists")
+    if user.get("disabled"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account has been disabled")
+    if not hmac.compare_digest(str(payload["pwv"]), _pw_version(user)):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Password changed - please sign in again")
+    return user
+
+
+def user_from_token(token: str) -> dict[str, Any]:
+    return _load_user(_decode(token, "access"))
+
+
+def user_from_ws_ticket(ticket: str, scope: str) -> dict[str, Any]:
+    payload = _decode(ticket, "ws")
+    if payload.get("scope") != scope:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ticket is not valid for this connection")
+    return _load_user(payload)
 
 
 def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict[str, Any]:
@@ -125,6 +144,13 @@ def require_roles(*roles: str) -> Callable[..., dict[str, Any]]:
 
 staff_only = require_roles("doctor", "student")
 doctor_only = require_roles("doctor")
+
+
+def admin_only(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+    if user["role"] == "patient" or not user.get("is_admin"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Requires a hospital administrator")
+    return user
+
 
 _FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 _cert_cache: dict[str, Any] = {"exp": 0.0, "certs": {}}
@@ -153,7 +179,7 @@ def verify_firebase_token(id_token: str) -> dict[str, Any]:
         key = load_pem_x509_certificate(cert.encode()).public_key()
         return jwt.decode(id_token, key, algorithms=["RS256"], audience=project,
                           issuer=f"https://securetoken.google.com/{project}")
-    except jwt.PyJWTError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Invalid Firebase token: {e}")
+    except jwt.PyJWTError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid Firebase token")
     except httpx.HTTPError:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Cannot reach Google to verify token")
