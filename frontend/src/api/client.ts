@@ -45,6 +45,8 @@ function errorMessage(body: unknown, fallback: string): string {
   return fallback
 }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+
 async function request<T>(method: string, path: string, body?: unknown, raw = false): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   const token = tokenStore.get()
@@ -52,7 +54,8 @@ async function request<T>(method: string, path: string, body?: unknown, raw = fa
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   let res: Response
   try {
-    res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    const url = `${API_BASE}${path}`
+    res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   } catch {
     throw new ApiError(0, 'Cannot reach the MedTrust server. Check your connection.')
   }
@@ -152,6 +155,10 @@ export interface DashboardData {
  */
 export async function wsUrl(path: string, consultationId?: string): Promise<string> {
   const { ticket } = await api.wsTicket(consultationId)
+  const configuredWs = (import.meta.env.VITE_WS_BASE_URL as string | undefined)?.replace(/\/$/, '')
+  if (configuredWs) {
+    return `${configuredWs}${path}${path.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`
+  }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   return `${proto}://${location.host}${path}${path.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`
 }

@@ -37,6 +37,12 @@ Tests: `cd backend && ../.venv/bin/pip install -r requirements-dev.txt && ../.ve
 
 Docker: `docker compose up --build`. The UI is served on http://localhost:3000, and nginx proxies the REST API and WebSockets to the backend.
 
+## Deploy to Vercel (Frontend)
+The frontend can be deployed directly to Vercel with automatic continuous integration:
+1. Import this repository into [Vercel](https://vercel.com/new).
+2. The included `vercel.json` automatically configures the build command (`cd frontend && npm install && npm run build`) and SPA client-side routing.
+3. Set `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` in the Vercel Environment Variables to point to your backend API server or public tunnel URL.
+
 ## Small machines
 The default install needs no database server or cache: one uvicorn worker, SQLite and in-process rooms use about 90 MB of RAM (measured), so it runs on a 1 GB VPS or a Raspberry Pi 4. The browser side adapts too: on devices with 4 GB RAM or less, 4 or fewer cores, or a slow/data-saver connection, the camera is captured at 640x360 / 15 fps; audio meters draw at 15 fps and pause in background tabs; pages load as separate chunks (first load about 65 KB of gzipped JS). `AI_CONCURRENCY` (default 2) caps simultaneous Gemini calls.
 
