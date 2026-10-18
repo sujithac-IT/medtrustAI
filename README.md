@@ -15,9 +15,17 @@ Browser (React 18 + Vite)                       API (FastAPI; 1 process, or N be
 
 ## Quick start
 Requirements: Python 3.10+, Node 18+.
+
+**Linux / macOS:**
 ```bash
 cp .env.example .env      # optional - everything works in demo mode without keys
 ./run_app.sh              # installs deps, builds the UI, serves http://localhost:8000
+```
+
+**Windows:**
+```powershell
+Copy-Item .env.example .env   # optional
+.\run_app.ps1                 # or run run_app.bat
 ```
 Development with hot reload:
 ```bash
