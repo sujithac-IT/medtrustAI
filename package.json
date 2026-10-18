@@ -1,0 +1,10 @@
+{
+  "name": "medtrust-ai",
+  "version": "4.0.0",
+  "private": true,
+  "description": "MedTrust AI - Teleconsultations with live transcription and doctor-approved AI case sheets",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "dev": "cd frontend && npm run dev"
+  }
+}
