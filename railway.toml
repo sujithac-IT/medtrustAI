@@ -1,0 +1,29 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "./backend/Dockerfile"
+
+[deploy]
+startCommand = "sh -c 'exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers ${WORKERS:-1} --proxy-headers --forwarded-allow-ips=\"*\" --ws-max-size 65536 --no-server-header'"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "always"
+
+[[deploy.envVars]]
+name = "DEMO_MODE"
+value = "true"
+
+[[deploy.envVars]]
+name = "CORS_ORIGINS"
+value = "https://medtrust-ai-two.vercel.app,http://localhost:5173,http://localhost:8000,*"
+
+[[deploy.envVars]]
+name = "DATABASE_PATH"
+value = "/data/medtrust.db"
+
+[[deploy.envVars]]
+name = "FORWARDED_ALLOW_IPS"
+value = "*"
+
+[[deploy.envVars]]
+name = "DOCTOR_INVITE_CODE"
+value = "MEDTRUST-STAFF"
