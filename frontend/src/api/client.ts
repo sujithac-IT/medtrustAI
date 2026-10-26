@@ -45,7 +45,23 @@ function errorMessage(body: unknown, fallback: string): string {
   return fallback
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+const DEFAULT_REMOTE_API = 'https://hybrid-collectible-colors-institutional.trycloudflare.com'
+const DEFAULT_REMOTE_WS = 'wss://hybrid-collectible-colors-institutional.trycloudflare.com'
+
+export function getApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('MEDTRUST_API_URL')
+    if (custom) return custom.replace(/\/$/, '')
+  }
+  const envVal = import.meta.env.VITE_API_BASE_URL as string | undefined
+  if (envVal) return envVal.replace(/\/$/, '')
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return ''
+  }
+  return DEFAULT_REMOTE_API
+}
+
+const API_BASE = getApiBase()
 
 async function request<T>(method: string, path: string, body?: unknown, raw = false): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
@@ -155,7 +171,13 @@ export interface DashboardData {
  */
 export async function wsUrl(path: string, consultationId?: string): Promise<string> {
   const { ticket } = await api.wsTicket(consultationId)
-  const configuredWs = (import.meta.env.VITE_WS_BASE_URL as string | undefined)?.replace(/\/$/, '')
+  let configuredWs = (
+    (typeof window !== 'undefined' ? localStorage.getItem('MEDTRUST_WS_URL') : null) ||
+    (import.meta.env.VITE_WS_BASE_URL as string | undefined)
+  )?.replace(/\/$/, '')
+  if (!configuredWs && typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    configuredWs = DEFAULT_REMOTE_WS
+  }
   if (configuredWs) {
     return `${configuredWs}${path}${path.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`
   }
