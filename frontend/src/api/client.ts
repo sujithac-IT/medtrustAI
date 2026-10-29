@@ -45,19 +45,20 @@ function errorMessage(body: unknown, fallback: string): string {
   return fallback
 }
 
-const DEFAULT_REMOTE_API = 'https://hybrid-collectible-colors-institutional.trycloudflare.com'
-const DEFAULT_REMOTE_WS = 'wss://hybrid-collectible-colors-institutional.trycloudflare.com'
+const DEFAULT_REMOTE_API = 'https://6334ace5db28c0.lhr.life'
+const DEFAULT_REMOTE_WS = 'wss://6334ace5db28c0.lhr.life'
 
 export function getApiBase(): string {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('MEDTRUST_API_URL')
     if (custom) return custom.replace(/\/$/, '')
+    // When served directly (via tunnel, LAN IP, or localhost), use relative paths to same origin
+    if (!window.location.hostname.endsWith('vercel.app')) {
+      return ''
+    }
   }
   const envVal = import.meta.env.VITE_API_BASE_URL as string | undefined
   if (envVal) return envVal.replace(/\/$/, '')
-  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    return ''
-  }
   return DEFAULT_REMOTE_API
 }
 
@@ -175,7 +176,7 @@ export async function wsUrl(path: string, consultationId?: string): Promise<stri
     (typeof window !== 'undefined' ? localStorage.getItem('MEDTRUST_WS_URL') : null) ||
     (import.meta.env.VITE_WS_BASE_URL as string | undefined)
   )?.replace(/\/$/, '')
-  if (!configuredWs && typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  if (!configuredWs && typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app')) {
     configuredWs = DEFAULT_REMOTE_WS
   }
   if (configuredWs) {

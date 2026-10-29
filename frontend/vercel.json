@@ -5,15 +5,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://hybrid-collectible-colors-institutional.trycloudflare.com/api/:path*"
+      "destination": "https://6334ace5db28c0.lhr.life/api/:path*"
     },
     {
       "source": "/docs",
-      "destination": "https://hybrid-collectible-colors-institutional.trycloudflare.com/docs"
+      "destination": "https://6334ace5db28c0.lhr.life/docs"
     },
     {
       "source": "/openapi.json",
-      "destination": "https://hybrid-collectible-colors-institutional.trycloudflare.com/openapi.json"
+      "destination": "https://6334ace5db28c0.lhr.life/openapi.json"
     },
     {
       "source": "/(.*)",
