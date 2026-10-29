@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: medtrust-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    plan: starter            # persistent disk (SQLite) needs a paid plan
+    disk:
+      name: medtrust-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEMO_MODE
+        value: "true"
+      - key: DOCTOR_INVITE_CODE
+        value: MEDTRUST-STAFF
+      - key: CORS_ORIGINS
+        value: "*"             # backend uses bearer tokens (no cookies); tighten to the Vercel URL later
+      - key: GEMINI_API_KEY
+        sync: false
