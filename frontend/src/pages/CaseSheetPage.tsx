@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { BadgeCheck, Eye, History, Languages, Pencil, Plus, Printer, RefreshCw, Save, ShieldAlert, ShieldCheck, Square, Trash2, Volume2 } from 'lucide-react'
+import { BadgeCheck, Eye, History, Languages, Pencil, Plus, Printer, RefreshCw, Save, ShieldCheck, Square, Trash2, Volume2 } from 'lucide-react'
 import { api } from '../api/client'
 import type { CaseSheet, Consultation, Medication, Sections, Symptom, Vitals } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
@@ -105,8 +105,7 @@ export default function CaseSheetPage() {
   })
   const approve = () => run('approve', async () => {
     const s = await api.approve(sheet.id, sheet.version)
-    setSheet(s); setDraft(s.sections); setApproving(false); setMode('preview')
-    setNotice('Case sheet signed and locked. The patient summary was rebuilt from the signed content.')
+    setSheet(s); setDraft(s.sections); setApproving(false); setMode('preview'); setNotice('Case sheet approved, signed and locked.')
   })
   const speak = () => {
     const synth = window.speechSynthesis
@@ -126,8 +125,6 @@ export default function CaseSheetPage() {
     synth.speak(u)
   }
 
-  const canSign = user?.role === 'doctor' && user.id === sheet.attending_doctor_id
-  const removed = sheet.guardrails?.removed ?? []
   const order = sheet.section_order
   const titles = sheet.section_titles
   const pi = draft.patient_info
@@ -193,9 +190,9 @@ export default function CaseSheetPage() {
           </div>
         )}
         {staff && !locked && <button className="btn sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? <Spinner light /> : <Save size={14} />} Save</button>}
-        {canSign && !locked && (
+        {user?.role === 'doctor' && !locked && (
           <button className="btn ok sm" disabled={!!busy} onClick={() => { if (dirty) { setError('Save your edits before approving.'); return } setReviewed(false); setApproving(true) }}>
-            <ShieldCheck size={14} /> Review and sign
+            <ShieldCheck size={14} /> Review & approve
           </button>
         )}
         <button className="btn ghost sm" onClick={() => window.print()}><Printer size={14} /> Print / PDF</button>
@@ -205,14 +202,7 @@ export default function CaseSheetPage() {
       {notice && <div className="no-print" style={{ marginBottom: 12 }}><Alert kind="success" onClose={() => setNotice(null)}>{notice}</Alert></div>}
       {!locked && <div className="no-print" style={{ marginBottom: 12 }}><Alert kind="warn">
         AI-generated draft ({sheet.source === 'gemini' ? 'Gemini' : 'local transcript extractor'}). Not valid for clinical use until reviewed and approved by the attending doctor.
-        {user?.role === 'student' && ' Students can edit the draft; only the attending doctor can sign.'}
-        {staff && !canSign && user?.role === 'doctor' && ' Only the attending doctor of this consultation can sign it.'}
-      </Alert></div>}
-      {!locked && staff && removed.length > 0 && <div className="no-print" style={{ marginBottom: 12 }}><Alert kind="info">
-        <ShieldAlert size={15} /> AI safety check removed {removed.length} suggestion{removed.length === 1 ? '' : 's'} that the transcript does not support. They are listed under Uncertain Information.
-      </Alert></div>}
-      {locked && sheet.integrity_ok === false && <div style={{ marginBottom: 12 }}><Alert kind="error">
-        Integrity check failed: the stored record no longer matches its signature. Do not rely on this copy; contact the records office.
+        {user?.role === 'student' && ' Students can edit the draft; only a doctor can approve.'}
       </Alert></div>}
 
       <article className={`sheet-paper${edit ? ' sheet-edit' : ''}`}>
@@ -221,11 +211,11 @@ export default function CaseSheetPage() {
             <BrandMark />
             <div>
               <div className="hosp">MedTrust University Teaching Hospital</div>
-              <div className="muted small">Teleconsultation case sheet</div>
+              <div className="tiny muted">Teleconsultation case sheet</div>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            {locked ? <span className="stamp"><BadgeCheck size={16} /> Signed</span> : <span className="badge warn">Draft, version {sheet.version}</span>}
+            {locked ? <span className="stamp"><BadgeCheck size={18} />APPROVED</span> : <span className="badge warn">DRAFT v{sheet.version}</span>}
             <div className="muted small mono" style={{ marginTop: 6 }}>{sheet.id}</div>
             {consult && <div className="muted small">{fmtDateTime(consult.started_at ?? consult.scheduled_at)}</div>}
           </div>
@@ -244,24 +234,22 @@ export default function CaseSheetPage() {
 
         <div className="sign">
           <div>
-            <div className="sig-name" style={{ fontSize: 16, fontWeight: 400, color: 'var(--graphite)' }}>{consult?.student_name ?? ''}</div>
-            <div className="line">Prepared with medical student</div>
+            <div style={{ minHeight: 40 }}>{consult?.student_name ?? ''}</div>
+            <div className="line">Prepared with / student</div>
           </div>
           <div>
-            <div className="sig-name">{locked && sheet.approval ? sheet.approval.approved_by.name : ''}</div>
+            <div style={{ minHeight: 40, fontFamily: 'var(--serif)', fontSize: 18 }}>
+              {locked && sheet.approval ? sheet.approval.approved_by.name : ''}
+            </div>
             <div className="line">
               Attending doctor{locked && sheet.approval ? ` - Reg. ${sheet.approval.approved_by.registration_number ?? '-'} - signed ${fmtDateTime(sheet.approval.approved_at)}` : ' (signature pending)'}
             </div>
           </div>
         </div>
         {locked && sheet.approval && (
-          <div className="seal">
-            <ShieldCheck size={18} style={{ flexShrink: 0 }} />
-            <div>
-              <b>Electronically signed{sheet.integrity_ok ? ', integrity verified' : ''}.</b> {sheet.approval.statement}
-              <div style={{ marginTop: 4 }}>Fingerprint <code>{sheet.approval.content_hash}</code></div>
-            </div>
-          </div>
+          <p className="muted small mono" style={{ marginTop: 14, wordBreak: 'break-all' }}>
+            Electronically signed. SHA-256 {sheet.approval.content_hash}. "{sheet.approval.statement}"
+          </p>
         )}
       </article>
 
@@ -275,7 +263,7 @@ export default function CaseSheetPage() {
         <div className="row wrap">
           {LANGS.map(([code, label]) => <button key={code} className={`lang-btn${lang === code ? ' on' : ''}`} onClick={() => { window.speechSynthesis?.cancel(); setSpeaking(false); setLang(code) }}>{label}</button>)}
         </div>
-        <div className="body" style={{ whiteSpace: 'pre-wrap', background: 'var(--chart)', borderRadius: 10, padding: 14, border: '1px solid var(--rule)' }}>
+        <div className="body" style={{ whiteSpace: 'pre-wrap', background: 'var(--paper-2)', borderRadius: 10, padding: 14, border: '1px solid var(--line)' }}>
           {sheet.summaries?.texts?.[lang] || 'Summary not available.'}
         </div>
         <div><button className="btn sm" onClick={speak} disabled={!sheet.summaries?.texts?.[lang]}>{speaking ? <Square size={14} /> : <Volume2 size={14} />} {speaking ? 'Stop' : 'Play voice'}</button></div>
@@ -297,13 +285,13 @@ export default function CaseSheetPage() {
         <Modal title="Clinical verification" onClose={() => setApproving(false)} footer={
           <>
             <button className="btn ghost" onClick={() => setApproving(false)}>Cancel</button>
-            <button className="btn ok" disabled={!reviewed || busy === 'approve'} onClick={approve}>{busy === 'approve' ? <Spinner light /> : <ShieldCheck size={16} />} Sign case sheet</button>
+            <button className="btn ok" disabled={!reviewed || busy === 'approve'} onClick={approve}>{busy === 'approve' ? <Spinner light /> : <ShieldCheck size={16} />} Approve & sign</button>
           </>
         }>
           <div className="stack">
-            <div className="card card-pad" style={{ background: 'var(--chart)' }}>
+            <div className="card card-pad" style={{ background: 'var(--paper-2)' }}>
               <div className="tiny muted">Signing as</div>
-              <b style={{ fontSize: 18 }}>{user.name}</b>
+              <b style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>{user.name}</b>
               <div className="small">{user.designation ?? 'Attending physician'}{user.specialization ? ` - ${user.specialization}` : ''}</div>
               <div className="small mono">Registration {user.registration_number ?? '-'}</div>
             </div>

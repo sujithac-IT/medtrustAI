@@ -106,7 +106,7 @@ export default function PatientDetailPage() {
           <div className="card-head"><h2>Consultation history</h2><span className="muted small">{history.length} visits</span></div>
           {history.length === 0 ? <Empty>No consultations yet.</Empty> : history.map((c) => (
             <div className="list-item" key={c.id} style={{ alignItems: 'flex-start' }}>
-              <div style={{ width: 4, alignSelf: 'stretch', borderRadius: 4, background: c.case_sheet_status === 'approved' ? 'var(--scrub)' : 'var(--rule)' }} />
+              <div style={{ width: 4, alignSelf: 'stretch', borderRadius: 4, background: c.case_sheet_status === 'approved' ? 'var(--ok)' : 'var(--line)' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Link to={`/consultations/${c.id}`} style={{ fontWeight: 600, textDecoration: 'none' }}>{fmtDateTime(c.scheduled_at)}</Link>
                 <div className="muted small">{c.doctor_name}{c.student_name ? ` with ${c.student_name}` : ''}{c.reason ? ` - ${c.reason}` : ''}</div>

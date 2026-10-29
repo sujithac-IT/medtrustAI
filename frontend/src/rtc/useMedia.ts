@@ -1,20 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/**
- * Capture profile matched to the device: phones and low-RAM laptops encode far less video,
- * which keeps CPU, battery and upload bandwidth in check on hospital Wi-Fi and 4G.
- */
-export function deviceProfile(): { lowEnd: boolean; video: MediaTrackConstraints } {
-  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean; effectiveType?: string } }
-  const mem = nav.deviceMemory ?? 8
-  const cores = nav.hardwareConcurrency ?? 8
-  const slowNet = !!nav.connection?.saveData || /(^|-)(2g|3g)$/.test(nav.connection?.effectiveType ?? '')
-  const lowEnd = mem <= 4 || cores <= 4 || slowNet
-  return lowEnd
-    ? { lowEnd, video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 20 }, facingMode: 'user' } }
-    : { lowEnd, video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 }, facingMode: 'user' } }
-}
-
 export function useLocalMedia() {
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -31,7 +16,7 @@ export function useLocalMedia() {
     try {
       const s = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: deviceProfile().video,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
       })
       ref.current = s
       setStream(s)

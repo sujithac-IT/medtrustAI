@@ -105,7 +105,7 @@ export function JoinLinks({ c }: { c: Consultation }) {
   const url = `${location.origin}${c.join_path}`
   return (
     <div className="row wrap">
-      <code className="mono small" style={{ background: 'var(--sheet)', padding: '5px 10px', borderRadius: 8, border: '1px solid var(--rule)' }}>{url}</code>
+      <code className="mono small" style={{ background: 'var(--paper)', padding: '5px 10px', borderRadius: 8, border: '1px solid var(--line)' }}>{url}</code>
       <button className="btn ghost sm" onClick={() => { void navigator.clipboard?.writeText(url); setCopied(true); window.setTimeout(() => setCopied(false), 1500) }}>
         <Copy size={14} /> {copied ? 'Copied' : 'Copy link'}
       </button>
@@ -155,7 +155,7 @@ export default function ConsultationsPage() {
               {items.map((c) => (
                 <tr key={c.id} className="click" onClick={() => nav(`/consultations/${c.id}`)}>
                   <td className="small">{fmtDateTime(c.scheduled_at)}<div className="muted">{c.reason}</div></td>
-                  <td>{staff ? <><Link to={`/consultations/${c.id}`} onClick={(e) => e.stopPropagation()} style={{ fontWeight: 700, textDecoration: 'none' }}>{c.patient_name}</Link><div className="muted small mono">{c.patient_mrn}</div></> : <b>{c.doctor_name}</b>}</td>
+                  <td>{staff ? <><b>{c.patient_name}</b><div className="muted small mono">{c.patient_mrn}</div></> : <b>{c.doctor_name}</b>}</td>
                   <td className="small">{c.doctor_name}{c.student_name && <div className="muted">{c.student_name}</div>}</td>
                   <td><StatusBadge c={c} /></td>
                   <td><SheetBadge status={c.case_sheet_status} /></td>

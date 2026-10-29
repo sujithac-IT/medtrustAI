@@ -66,13 +66,13 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="shell">
       <div className="mobile-bar no-print">
-        <div className="row"><BrandMark /><b>MedTrust AI</b></div>
-        <button className="btn ghost icon" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Menu size={18} /></button>
+        <div className="row"><b style={{ fontFamily: 'var(--serif)' }}>MedTrust AI</b></div>
+        <button className="btn ghost icon" style={{ color: 'var(--paper)', borderColor: 'rgba(255,255,255,.2)' }} onClick={() => setOpen(!open)} aria-label="Menu"><Menu size={18} /></button>
       </div>
       <aside className={`side${open ? ' open' : ''}`}>
         <div className="brand">
           <BrandMark />
-          <div><b>MedTrust AI</b><span>Teaching hospital records</span></div>
+          <div><b>MedTrust AI</b><span>Clinical teleconsult</span></div>
         </div>
         {staff && (
           <button className="btn signal" style={{ marginBottom: 14 }} onClick={() => nav('/consultations?new=1')}>
@@ -89,14 +89,14 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="side-foot">
           <Avatar name={user.name} />
           <div className="who"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}{user.registration_number ? ` - ${user.registration_number}` : ''}</span></div>
-          <button className="btn ghost icon" onClick={() => { logout(); nav('/login') }} aria-label="Sign out" title="Sign out">
+          <button className="btn icon" style={{ background: 'transparent', borderColor: 'rgba(255,255,255,.18)' }} onClick={() => { logout(); nav('/login') }} aria-label="Sign out" title="Sign out">
             <LogOut size={16} />
           </button>
         </div>
       </aside>
       <main className="main">
         {toast && (
-          <div className="alert info no-print" role="status" style={{ position: 'fixed', right: 20, top: 20, zIndex: 80, maxWidth: 380, boxShadow: 'var(--lift)' }}>
+          <div className="alert warn no-print" style={{ position: 'fixed', right: 20, top: 20, zIndex: 80, maxWidth: 380, boxShadow: 'var(--shadow)' }}>
             <span style={{ flex: 1 }}>{toast}</span>
             <button className="btn sm" onClick={() => { setToast(null); nav('/consultations?status=live') }}>View</button>
           </div>

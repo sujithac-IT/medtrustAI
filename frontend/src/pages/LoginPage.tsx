@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { GraduationCap, Stethoscope, UserRound, Check } from 'lucide-react'
+import { GraduationCap, Stethoscope, UserRound } from 'lucide-react'
 import { api, type AuthConfig } from '../api/client'
 import { takeSignoutReason, useAuth } from '../auth/AuthContext'
 import type { Role } from '../api/types'
@@ -52,25 +52,16 @@ export default function LoginPage() {
           <BrandMark />
           <div><b>MedTrust AI</b><span>Teaching hospital teleconsultation</span></div>
         </div>
-        <h1>From the conversation to a signed case sheet.</h1>
-        <p>Meet patients over video. What each person says is transcribed on their own device, drafted into the hospital case sheet, and stays a draft until the attending doctor signs it.</p>
-        <ol className="auth-flow" aria-label="How a consultation becomes a record">
-          <li>
-            <span className="dot" aria-hidden="true">1</span>
-            <div><div className="say">The patient says</div>
-              <div className="slip quote">"It's a heaviness in my chest when I climb the stairs. Four days now."</div></div>
-          </li>
-          <li>
-            <span className="dot" aria-hidden="true">2</span>
-            <div><div className="say">The draft records</div>
-              <div className="slip"><dl><dt>Chief complaint</dt><dd>Chest heaviness on exertion</dd><dt>Duration</dt><dd>4 days</dd></dl></div></div>
-          </li>
-          <li>
-            <span className="dot" aria-hidden="true"><Check size={14} /></span>
-            <div><div className="say">The doctor signs</div>
-              <div className="slip signed"><span className="sig">Dr. Rajesh Sharma</span><span className="stamp"><Check size={14} /> Signed</span></div></div>
-          </li>
-        </ol>
+        <svg className="ecg" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 60 H380 L410 60 L430 20 L455 105 L480 8 L505 92 L525 60 H760 L780 60 L795 40 L812 80 L828 60 H1200" fill="none" stroke="#E8833A" strokeWidth="3" />
+        </svg>
+        <h1>Every word of the visit, <em>charted</em> and signed.</h1>
+        <p>Doctors, students and patients meet over secure video. Each voice is transcribed live, and the AI drafts a 17-section case sheet for the attending doctor to review and sign.</p>
+        <div className="auth-steps">
+          <div><b>01 / CONSULT</b>Video room with waiting lobby</div>
+          <div><b>02 / TRANSCRIBE</b>Per-speaker live captions</div>
+          <div><b>03 / SIGN</b>AI draft, doctor approval</div>
+        </div>
       </section>
       <section className="auth-form">
         <div className="card reveal">

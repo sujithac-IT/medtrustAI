@@ -93,7 +93,7 @@ export default function SettingsPage() {
         <div className="card-head"><h2>Integrations</h2>{h ? <span className="badge ok">Server {h.status}</span> : <Spinner />}</div>
         {flags.map(([name, on, hint]) => (
           <div className="list-item" key={name} style={{ alignItems: 'flex-start' }}>
-            {on ? <CheckCircle2 size={18} color="var(--scrub)" /> : <CircleSlash size={18} color="var(--muted)" />}
+            {on ? <CheckCircle2 size={18} color="var(--ok)" /> : <CircleSlash size={18} color="var(--ink-soft)" />}
             <div style={{ flex: 1 }}><b>{name}</b><div className="muted small">{hint}</div></div>
             <span className={`badge ${on ? 'ok' : 'neutral'}`}>{on ? 'Enabled' : 'Off'}</span>
           </div>

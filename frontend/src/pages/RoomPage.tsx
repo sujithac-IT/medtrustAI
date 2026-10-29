@@ -28,8 +28,8 @@ function Tile({ name, role, stream, videoOn, audioOn, self, conn, screen }: {
   return (
     <div className={`tile${level > 0.08 ? ' speaking' : ''}`}>
       <VideoEl stream={stream} muted={self} mirror={self && !screen} />
-      {!hasVideo && <div className="ph" style={{ background: '#17224a' }}><Avatar name={name} /></div>}
-      <div className="label">{audioOn ? <Mic size={13} /> : <MicOff size={13} color="#ff9b93" />}<b>{name}{self ? ' (you)' : ''}</b><span style={{ opacity: 0.7 }}>{role}</span></div>
+      {!hasVideo && <div className="ph" style={{ background: '#12292e' }}><Avatar name={name} /></div>}
+      <div className="label">{audioOn ? <Mic size={13} /> : <MicOff size={13} color="#f08b7a" />}<b>{name}{self ? ' (you)' : ''}</b><span style={{ opacity: 0.7 }}>{role}</span></div>
       <div className="wave"><AudioWaveform stream={stream} onLevel={setLevel} /></div>
       {conn && conn !== 'connected' && <span className="conn badge neutral">{conn === 'new' ? 'connecting' : conn}</span>}
     </div>
@@ -66,12 +66,12 @@ export default function RoomPage() {
         <div className="prejoin reveal">
           <div className="preview">
             {media.stream && media.videoOn ? <video autoPlay playsInline muted ref={(v) => { if (v && v.srcObject !== media.stream) v.srcObject = media.stream }} />
-              : <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#e6eaf5' }}><Avatar name={user.name} size="lg" /></div>}
+              : <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#e9f0ef' }}><Avatar name={user.name} size="lg" /></div>}
             <div className="controls">
               <button className={`ctl${media.audioOn ? '' : ' off'}`} onClick={media.toggleAudio} aria-label="Toggle microphone">{media.audioOn ? <Mic size={20} /> : <MicOff size={20} />}</button>
               <button className={`ctl${media.videoOn ? '' : ' off'}`} onClick={media.toggleVideo} aria-label="Toggle camera">{media.videoOn ? <Video size={20} /> : <VideoOff size={20} />}</button>
             </div>
-            <div style={{ position: 'absolute', top: 14, left: 14, background: 'rgba(8,20,23,.7)', padding: '6px 10px', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', color: '#e6eaf5', fontSize: 13 }}>
+            <div style={{ position: 'absolute', top: 14, left: 14, background: 'rgba(8,20,23,.7)', padding: '6px 10px', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', color: '#e9f0ef', fontSize: 13 }}>
               <Mic size={14} /> <AudioWaveform stream={media.stream} bars={12} />
             </div>
           </div>
@@ -207,8 +207,7 @@ function Call({ c, setC, media }: { c: Consultation; setC: (c: Consultation) => 
   const waiting = room.roster.filter((p) => !p.admitted)
   const admittedRoster = room.roster.filter((p) => p.admitted)
   const elapsed = startedAt ? (now - new Date(startedAt).getTime()) / 1000 : 0
-  // the "waiting for others" placeholder occupies a tile too, so never lay out fewer than two
-  const n = Math.min(6, Math.max(2, remotes.length + 1))
+  const n = Math.min(6, remotes.length + 1)
 
   return (
     <div className="room">
@@ -255,11 +254,11 @@ function Call({ c, setC, media }: { c: Consultation; setC: (c: Consultation) => 
         <button className={`ctl${media.videoOn ? '' : ' off'}`} onClick={media.toggleVideo} title="Camera" aria-label="Toggle camera">{media.videoOn ? <Video size={20} /> : <VideoOff size={20} />}</button>
         <button className={`ctl${screen ? ' on' : ''}`} onClick={toggleScreen} disabled={!inCall} title="Share screen" aria-label="Share screen"><MonitorUp size={20} /></button>
         <button className={`ctl${captions ? ' on' : ''}`} onClick={() => setCaptions(!captions)} title="Live transcription" aria-label="Toggle transcription">{captions ? <Captions size={20} /> : <CaptionsOff size={20} />}</button>
-        <select className="input" style={{ width: 160, background: '#26346a', color: '#e6eaf5', border: 'none' }} value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Speech language">
+        <select className="input" style={{ width: 160, background: '#23434a', color: '#e9f0ef', border: 'none' }} value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Speech language">
           {SPEECH_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>
         <button className="ctl end" onClick={leave} title="Leave" aria-label="Leave call"><PhoneOff size={20} /></button>
-        {isDoctor && inCall && (user?.id === c.doctor_id || user?.is_admin) && <button className="btn danger sm" onClick={endForAll}>End for all</button>}
+        {isDoctor && inCall && <button className="btn danger sm" onClick={endForAll}>End for all</button>}
       </div>
 
       <aside className="room-side">
@@ -268,7 +267,7 @@ function Call({ c, setC, media }: { c: Consultation; setC: (c: Consultation) => 
           <button className={tab === 'people' ? 'on' : ''} onClick={() => setTab('people')}><Users size={13} /> People{waiting.length ? ` (${waiting.length})` : ''}</button>
           <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}><MessageSquare size={13} /> Chat</button>
         </div>
-        {(err || room.notice || speech.error || media.error) && <div style={{ padding: '0 14px 10px' }}><Alert kind="warn" onClose={err ? () => setErr(null) : room.notice ? room.clearNotice : undefined}>{err || room.notice || speech.error || media.error}</Alert></div>}
+        {(err || speech.error || media.error) && <div style={{ padding: '0 14px 10px' }}><Alert kind="warn" onClose={err ? () => setErr(null) : undefined}>{err || speech.error || media.error}</Alert></div>}
         {waiting.length > 0 && user?.role !== 'patient' && tab !== 'people' && (
           <div style={{ padding: '0 14px 10px' }}><Alert kind="info">{waiting[0].name} is waiting. <button className="btn sm ok" onClick={() => room.admit(waiting[0].peer_id)}>Admit</button></Alert></div>
         )}
@@ -308,8 +307,8 @@ function Call({ c, setC, media }: { c: Consultation; setC: (c: Consultation) => 
               {admittedRoster.map((p) => (
                 <div key={p.peer_id} className="row" style={{ padding: '6px 0' }}>
                   <Avatar name={p.name} /><div style={{ flex: 1 }}><b>{p.name}</b>{p.peer_id === room.selfId && <span className="muted small"> (you)</span>}<div><RoleBadge role={p.role} /></div></div>
-                  {p.media.audio ? <Mic size={15} /> : <MicOff size={15} color="var(--alert)" />}
-                  {p.media.video ? <Video size={15} /> : <VideoOff size={15} color="var(--alert)" />}
+                  {p.media.audio ? <Mic size={15} /> : <MicOff size={15} color="var(--danger)" />}
+                  {p.media.video ? <Video size={15} /> : <VideoOff size={15} color="var(--danger)" />}
                 </div>
               ))}
             </div>
@@ -322,7 +321,7 @@ function Call({ c, setC, media }: { c: Consultation; setC: (c: Consultation) => 
           )}
         </div>
         {tab === 'chat' && (
-          <form className="row" style={{ padding: 12, borderTop: '1px solid var(--rule)' }} onSubmit={sendChat}>
+          <form className="row" style={{ padding: 12, borderTop: '1px solid var(--line)' }} onSubmit={sendChat}>
             <input className="input" value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Message" disabled={!inCall} />
             <button className="btn icon" disabled={!inCall} aria-label="Send"><Send size={16} /></button>
           </form>

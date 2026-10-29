@@ -49,8 +49,8 @@ export function StatusBadge({ c }: { c: Pick<Consultation, 'status' | 'presence'
 }
 
 export function SheetBadge({ status }: { status?: string | null }) {
-  if (status === 'approved') return <span className="badge ok">Signed</span>
-  if (status === 'draft') return <span className="badge warn">Draft, not signed</span>
+  if (status === 'approved') return <span className="badge ok">Approved</span>
+  if (status === 'draft') return <span className="badge warn">Draft - needs approval</span>
   return <span className="badge neutral">No case sheet</span>
 }
 
@@ -68,7 +68,7 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
           <button className="btn ghost icon" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <div className="card-pad">{children}</div>
-        {footer && <div className="card-head" style={{ borderTop: '1px solid var(--rule-2)', borderBottom: 'none', justifyContent: 'flex-end' }}>{footer}</div>}
+        {footer && <div className="card-head" style={{ borderTop: '1px solid var(--line-2)', borderBottom: 'none', justifyContent: 'flex-end' }}>{footer}</div>}
       </div>
     </div>
   )

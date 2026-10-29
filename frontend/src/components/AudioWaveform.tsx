@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 /** Live audio level bars from a MediaStream via WebAudio AnalyserNode. */
-export default function AudioWaveform({ stream, bars = 5, color = '#5fd0bd', height = 18, onLevel }: {
+export default function AudioWaveform({ stream, bars = 5, color = '#E8833A', height = 18, onLevel }: {
   stream: MediaStream | null; bars?: number; color?: string; height?: number; onLevel?: (level: number) => void
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -15,7 +15,7 @@ export default function AudioWaveform({ stream, bars = 5, color = '#5fd0bd', hei
     const ctx = new AC()
     const src = ctx.createMediaStreamSource(new MediaStream([track]))
     const analyser = ctx.createAnalyser()
-    analyser.fftSize = 64
+    analyser.fftSize = 256
     analyser.smoothingTimeConstant = 0.75
     src.connect(analyser)
     const data = new Uint8Array(analyser.frequencyBinCount)
@@ -30,13 +30,7 @@ export default function AudioWaveform({ stream, bars = 5, color = '#5fd0bd', hei
     g.scale(dpr, dpr)
     let raf = 0
     let lastReport = 0
-    let lastDraw = 0
-    // ~15 fps is plenty for a level meter and costs a fraction of a 60 fps loop on low-end devices.
-    const frameMs = 66
     const draw = (t: number) => {
-      raf = requestAnimationFrame(draw)
-      if (document.hidden || t - lastDraw < frameMs) return
-      lastDraw = t
       analyser.getByteFrequencyData(data)
       g.clearRect(0, 0, w, height)
       const step = Math.floor(data.length / 2 / bars)
@@ -47,7 +41,7 @@ export default function AudioWaveform({ stream, bars = 5, color = '#5fd0bd', hei
         const v = sum / step / 255
         total += v
         const bh = Math.max(3, v * height * 1.6)
-        g.fillStyle = track.enabled ? color : '#7d87a8'
+        g.fillStyle = track.enabled ? color : '#6b7f82'
         g.beginPath()
         g.roundRect(i * 6 + 1, (height - Math.min(bh, height)) / 2, 4, Math.min(bh, height), 2)
         g.fill()
@@ -56,6 +50,7 @@ export default function AudioWaveform({ stream, bars = 5, color = '#5fd0bd', hei
         levelCb.current?.(track.enabled ? total / bars : 0)
         lastReport = t
       }
+      raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
     return () => {
