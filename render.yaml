@@ -5,12 +5,10 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /api/health
-    plan: starter            # persistent disk (SQLite) needs a paid plan
-    disk:
-      name: medtrust-data
-      mountPath: /data
-      sizeGB: 1
+    plan: free               # no persistent disk: SQLite resets on redeploy. Switch to starter + disk when funded.
     envVars:
+      - key: DATABASE_PATH
+        value: /tmp/medtrust.db
       - key: JWT_SECRET
         generateValue: true
       - key: DEMO_MODE
