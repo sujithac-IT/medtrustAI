@@ -45,8 +45,8 @@ function errorMessage(body: unknown, fallback: string): string {
   return fallback
 }
 
-const DEFAULT_REMOTE_API = 'https://6334ace5db28c0.lhr.life'
-const DEFAULT_REMOTE_WS = 'wss://6334ace5db28c0.lhr.life'
+const DEFAULT_REMOTE_API = 'https://medtrust-ai-live.loca.lt'
+const DEFAULT_REMOTE_WS = 'wss://medtrust-ai-live.loca.lt'
 
 export function getApiBase(): string {
   if (typeof window !== 'undefined') {
