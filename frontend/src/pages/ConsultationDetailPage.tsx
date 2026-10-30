@@ -155,7 +155,9 @@ export default function ConsultationDetailPage() {
   if (!c) return <Spinner />
 
   const generate = () => run('gen', async () => {
-    const sheet = await api.generateCaseSheet(c.id)
+    const overwrite = !!c.case_sheet_id
+    if (overwrite && !confirm('Regenerate the case sheet from the transcript? Every edit made to the current draft will be replaced. The old version stays in the audit trail.')) return
+    const sheet = await api.generateCaseSheet(c.id, overwrite)
     nav(`/case-sheets/${sheet.id}`)
   })
   const addNote = (e: FormEvent) => {
